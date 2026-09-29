@@ -1,34 +1,28 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Inventario Ingeagro Torres
 
-## Getting Started
+Aplicación Next.js con TypeScript. Este repositorio contiene por ahora la base
+del proyecto y el modelo de datos; la interfaz de inventario aún no está
+implementada.
 
-First, run the development server:
+Requiere Node.js 22 o superior.
+
+## Desarrollo
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Validación: `npm run build` y `npm run lint`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Supabase
 
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- La migración está en `supabase/migrations/` y el seed en `supabase/seed.sql`.
+- El seed crea nueve categorías, las torres C1-C3 y 24 compartimientos por torre.
+- Copiar `.env.example` a `.env.local` y completar la URL y la clave **publicable**
+  desde el panel del proyecto Supabase. `.env.local` está ignorado por Git.
+- Para una base local, usar Supabase CLI y Docker: `npx supabase@latest start`
+  aplica las migraciones y el seed; `npx supabase@latest db reset` los vuelve a
+  aplicar desde cero.
+- No hay políticas RLS ni login todavía: la clave publicable no da acceso a las
+  tablas. La política de acceso deberá definirse antes de usar datos en la UI.
