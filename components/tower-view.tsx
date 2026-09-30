@@ -9,13 +9,16 @@ import { TowerTopView } from "@/components/tower-top-view";
 import type { TowerDetail, TowerCompartment } from "@/lib/tower-model";
 import type { CompartmentOption, ProductOption } from "@/lib/stock-model";
 
-export function TowerView({ tower, compartments, products }: {
+export function TowerView({ tower, compartments, products, initialCode }: {
   tower: TowerDetail;
   compartments: CompartmentOption[];
   products: ProductOption[];
+  initialCode?: string;
 }) {
-  const [selectedId, setSelectedId] = useState<number | null>(null);
-  const [floorNumber, setFloorNumber] = useState(tower.pisos[0]?.numero ?? null);
+  const initial = tower.pisos.flatMap((floor) => floor.compartimientos)
+    .find((item) => item.codigo === initialCode?.trim().toUpperCase());
+  const [selectedId, setSelectedId] = useState<number | null>(initial?.id ?? null);
+  const [floorNumber, setFloorNumber] = useState(initial?.piso ?? tower.pisos[0]?.numero ?? null);
   const activeFloor =
     tower.pisos.find((floor) => floor.numero === floorNumber) ?? tower.pisos[0];
   const selected: TowerCompartment | null =

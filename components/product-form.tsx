@@ -16,6 +16,9 @@ import {
   validateImage,
   validateProduct,
 } from "@/lib/product-validation";
+import { similarProducts } from "@/lib/rapid-model";
+
+type ExistingProduct = { id: string; nombre: string; categoria: string; nombre_normalizado?: string };
 
 const IMAGE_EXTENSIONS: Record<string, string> = {
   "image/jpeg": "jpg",
@@ -26,12 +29,21 @@ const IMAGE_EXTENSIONS: Record<string, string> = {
 export function ProductForm({
   initial,
   initialCategories,
+  onCreated,
+  onCancel,
+  quick = false,
 }: {
   initial?: Product;
   initialCategories: Category[];
+  onCreated?: (product: ExistingProduct) => void;
+  onCancel?: () => void;
+  quick?: boolean;
 }) {
   const router = useRouter();
   const busyRef = useRef(false);
+  const checkingRef = useRef(false);
+  const approvedNameRef = useRef("");
+  const formRef = useRef<HTMLFormElement>(null);
   const [categories, setCategories] = useState(initialCategories);
   const [nombre, setNombre] = useState(initial?.nombre ?? "");
   const [categoriaId, setCategoriaId] = useState(initial?.categoria_id ?? "");
@@ -48,6 +60,7 @@ export function ProductForm({
   const [notice, setNotice] = useState("");
   const [cleanupPath, setCleanupPath] = useState<string | null>(null);
   const [savedId, setSavedId] = useState<string | null>(null);
+  const [similar, setSimilar] = useState<ExistingProduct[]>([]);
 
   useEffect(() => {
     return () => {
@@ -169,7 +182,7 @@ export function ProductForm({
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (pending || busyRef.current || cleanupPath || savedId) return;
+    if (pending || busyRef.current || checkingRef.current || cleanupPath || savedId) return;
     const validationError = validateProduct(
       nombre,
       categoriaId,
@@ -187,6 +200,37 @@ export function ProductForm({
         return;
       }
     }
+    if (!initial && approvedNameRef.current !== nombre) {
+      checkingRef.current = true;
+      setPending(true);
+      setStage("Comprobando productos parecidos…");
+      const supabase = createSupabaseClient();
+      const existing: ExistingProduct[] = [];
+      try {
+        for (let start = 0; ; start += 1000) {
+          const { data, error: listError } = await supabase.from("productos")
+            .select("id,nombre,nombre_normalizado,categorias(nombre)").order("id").range(start, start + 999);
+          if (listError) {
+            setError("No pudimos comprobar productos parecidos. Inténtalo de nuevo.");
+            return;
+          }
+          existing.push(...(data ?? []).map((item) => ({ id: item.id, nombre: item.nombre,
+            nombre_normalizado: item.nombre_normalizado,
+            categoria: (item.categorias as unknown as { nombre: string } | null)?.nombre ?? "Sin categoría" })));
+          if (!data || data.length < 1000) break;
+        }
+        const candidates = similarProducts(nombre, existing);
+        if (candidates.length) { setSimilar(candidates); setError(""); return; }
+      } catch {
+        setError("No pudimos comprobar productos parecidos. Inténtalo de nuevo.");
+        return;
+      } finally {
+        checkingRef.current = false;
+        setPending(false);
+        setStage("");
+      }
+    }
+    setSimilar([]);
     busyRef.current = true;
     setPending(true);
     setError("");
@@ -268,8 +312,9 @@ export function ProductForm({
           return;
         }
       }
-      router.push(`/productos/${productId}?guardado=1`);
-      router.refresh();
+      if (onCreated && !initial) onCreated({ id: productId, nombre,
+        categoria: categories.find((item) => item.id === categoriaId)?.nombre ?? "Sin categoría" });
+      else { router.push(`/productos/${productId}?guardado=1`); router.refresh(); }
     } catch {
       if (saved) {
         setSavedId(productId);
@@ -294,8 +339,8 @@ export function ProductForm({
   }
 
   return (
-    <div className="catalog-form-layout">
-      <form className="catalog-form" onSubmit={save} noValidate>
+    <div className={quick ? "catalog-form-layout quick" : "catalog-form-layout"}>
+      <form ref={formRef} className="catalog-form" onSubmit={save} noValidate>
         <div className="catalog-form-section">
           <h2>Datos del producto</h2>
           <p>La foto y la descripción se pueden completar después.</p>
@@ -304,7 +349,7 @@ export function ProductForm({
             <input
               id="product-name"
               value={nombre}
-              onChange={(event) => setNombre(event.target.value)}
+              onChange={(event) => { setNombre(event.target.value); setSimilar([]); approvedNameRef.current = ""; }}
               maxLength={PRODUCT_NAME_MAX}
               placeholder="Ej. ESP32-S3"
               autoComplete="off"
@@ -352,6 +397,10 @@ export function ProductForm({
               </div>
             </div>
           )}
+        </div>
+
+        <details className={quick ? "quick-more-details compact" : "quick-more-details"} open={!quick}>
+          <summary>Más detalles (opcional)</summary>
           <label className="catalog-field" htmlFor="product-description">
             <span>Descripción <small>Opcional</small></span>
             <textarea
@@ -364,8 +413,6 @@ export function ProductForm({
               disabled={pending || !!savedId}
             />
           </label>
-        </div>
-
         <div className="catalog-form-section">
           <h2>Fotografía</h2>
           <p>JPG, PNG o WebP · hasta 5 MB.</p>
@@ -402,6 +449,23 @@ export function ProductForm({
             </div>
           </div>
         </div>
+        </details>
+
+        {similar.length > 0 && <div className="similar-warning" role="alert">
+          <strong>Encontramos productos parecidos</strong>
+          <p>Revisa si el producto ya existe antes de crear otro registro.</p>
+          {similar.map((item) => <div className="similar-candidate" key={item.id}>
+            <span><strong>{item.nombre}</strong><small>{item.categoria}</small></span>
+            <button type="button" className="catalog-button primary" onClick={() => {
+              if (onCreated) onCreated(item);
+              else router.push(`/productos/${item.id}`);
+            }}>Usar este producto</button>
+          </div>)}
+          <button type="button" className="catalog-quiet-button" onClick={() => {
+            approvedNameRef.current = nombre;
+            formRef.current?.requestSubmit();
+          }}>Crear de todos modos</button>
+        </div>}
 
         {error && <p className="catalog-message error" role="alert">{error}</p>}
         {notice && <p className="catalog-message success" role="status"><CheckCircle2 size={18} aria-hidden="true" /> {notice}</p>}
@@ -410,18 +474,18 @@ export function ProductForm({
         )}
         {savedId && <Link className="catalog-quiet-button" href={`/productos/${savedId}?guardado=1`}>Ver producto guardado</Link>}
         <div className="catalog-form-actions">
-          <Link href={initial ? `/productos/${initial.id}` : "/productos"} className="catalog-quiet-button">Cancelar</Link>
+          {onCancel ? <button type="button" onClick={onCancel} className="catalog-quiet-button" disabled={pending}>Cancelar</button> : <Link href={initial ? `/productos/${initial.id}` : "/productos"} className="catalog-quiet-button">Cancelar</Link>}
           <button type="submit" className="catalog-button primary" disabled={pending || !!cleanupPath || !!savedId}>
             {pending ? stage : initial ? "Guardar cambios" : "Agregar producto"}
           </button>
         </div>
       </form>
       <form id="category-form" onSubmit={addCategory} className="catalog-hidden-form" />
-      <aside className="catalog-form-aside">
+      {!quick && <aside className="catalog-form-aside">
         <span className="catalog-aside-icon"><Plus size={23} aria-hidden="true" /></span>
         <h2>Un catálogo claro para todo el equipo</h2>
         <p>Registra el producto una sola vez. Sus existencias y ubicaciones aparecerán aquí cuando se asignen movimientos de inventario.</p>
-      </aside>
+      </aside>}
     </div>
   );
 }

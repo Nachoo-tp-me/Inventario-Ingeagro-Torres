@@ -1,12 +1,12 @@
 import { Suspense } from "react";
-import { ArrowRight, ShieldCheck } from "lucide-react";
+import { ArrowRight, ShieldCheck, Zap } from "lucide-react";
 import Link from "next/link";
 import {
   Metrics,
   PageHeading,
-  SearchPreview,
   TowerGrid,
 } from "@/components/dashboard";
+import { GlobalSearch } from "@/components/global-search";
 import { getDashboardSummary } from "@/lib/inventory";
 
 async function DashboardData() {
@@ -60,7 +60,8 @@ export default function HomePage() {
           <div className="hero-core" />
         </div>
       </div>
-      <SearchPreview />
+      <Link href="/carga" className="rapid-home-link"><Zap size={23} aria-hidden="true" /><span><strong>Carga rápida</strong><small>Registra productos mientras recorres las torres</small></span><ArrowRight size={19} aria-hidden="true" /></Link>
+      <GlobalSearch />
       <Suspense
         fallback={
           <div

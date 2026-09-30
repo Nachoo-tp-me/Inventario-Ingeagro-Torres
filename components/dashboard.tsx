@@ -5,7 +5,6 @@ import {
   Boxes,
   Layers3,
   Package,
-  Search,
   Warehouse,
 } from "lucide-react";
 import type { DashboardSummary, TowerSummary } from "@/lib/inventory";
@@ -24,21 +23,6 @@ export function PageHeading({
       <p className="eyebrow">{eyebrow}</p>
       <h1>{title}</h1>
       {description && <p className="page-description">{description}</p>}
-    </div>
-  );
-}
-
-export function SearchPreview() {
-  return (
-    <div className="search-preview">
-      <Search size={22} aria-hidden="true" />
-      <input
-        type="search"
-        placeholder="Buscar producto o ubicación..."
-        aria-label="Buscar producto o ubicación, disponible próximamente"
-        readOnly
-      />
-      <span className="search-coming">Próximamente</span>
     </div>
   );
 }

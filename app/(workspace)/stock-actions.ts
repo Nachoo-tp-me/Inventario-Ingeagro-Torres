@@ -62,10 +62,12 @@ export async function submitStockOperation(input: StockOperationInput): Promise<
     revalidatePath("/torres");
     revalidatePath("/productos");
     revalidatePath("/historial");
+    revalidatePath("/carga");
     revalidatePath(`/productos/${input.productoId}`);
     const ids = [...new Set([input.origenId, input.destinoId].filter((id): id is number => !!id))];
     if (ids.length) {
-      const { data } = await supabase.from("compartimientos").select("torre_id").in("id", ids);
+      const { data } = await supabase.from("compartimientos").select("torre_id,codigo").in("id", ids);
+      for (const compartment of data ?? []) revalidatePath(`/carga/${compartment.codigo}`);
       for (const towerId of new Set((data ?? []).map((row) => row.torre_id))) {
         revalidatePath(`/torres/C${towerId}`);
       }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { Boxes, Check, MapPin, Package, Plus, X } from "lucide-react";
 import type { TowerCompartment } from "@/lib/tower-model";
 import type { CompartmentOption, ProductOption } from "@/lib/stock-model";
@@ -84,6 +85,7 @@ export function CompartmentDetail({
             <span className="sheet-separator">·</span>
             <span>Compartimiento {compartment.posicion}</span>
           </div>
+          <Link className="catalog-button rapid-sheet-link" href={`/carga/${compartment.codigo}`}><Plus size={17} aria-hidden="true" /> Cargar aquí</Link>
 
           <div
             className={`sheet-status ${compartment.ocupado ? "occupied" : "available"}`}
