@@ -38,20 +38,33 @@ export function TowerFloor({
   number,
   compartments,
   selectedId,
+  active,
+  onSelectFloor,
   onSelect,
 }: {
   number: number;
   compartments: TowerCompartment[];
   selectedId: number | null;
+  active: boolean;
+  onSelectFloor: (number: number) => void;
   onSelect: (id: number) => void;
 }) {
   return (
-    <section className="tower-floor" aria-label={`Piso ${number}`}>
-      <div className="floor-label">
+    <section
+      className={`tower-floor${active ? " active" : ""}`}
+      aria-label={`Piso ${number}`}
+    >
+      <button
+        type="button"
+        className="floor-label"
+        onClick={() => onSelectFloor(number)}
+        aria-label={`Mostrar vista superior del piso ${number}`}
+        aria-pressed={active}
+      >
         <span className="floor-label-small">NIVEL</span>
         <strong>{String(number).padStart(2, "0")}</strong>
         <span>Piso {number}</span>
-      </div>
+      </button>
       <div className="floor-grid">
         {compartments.map((compartment) => (
           <CompartmentButton

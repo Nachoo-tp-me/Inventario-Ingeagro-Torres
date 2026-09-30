@@ -2,35 +2,17 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, ArrowUp, Layers3, MousePointer2 } from "lucide-react";
+import { ArrowLeft, Layers3 } from "lucide-react";
 import { CompartmentDetail } from "@/components/compartment-detail";
 import { TowerFloor } from "@/components/tower-floor";
+import { TowerTopView } from "@/components/tower-top-view";
 import type { TowerDetail, TowerCompartment } from "@/lib/tower-model";
-import { COMPARTMENT_SLOTS } from "@/lib/tower-orientation";
-
-function OrientationKey() {
-  return (
-    <div
-      className="orientation-key"
-      aria-label="Posiciones de compartimientos en sentido horario, vistas desde arriba"
-    >
-      {[1, 2, 3, 4].map((number) => {
-        const slot = COMPARTMENT_SLOTS[number];
-        return (
-          <span
-            key={number}
-            style={{ gridRow: slot.row, gridColumn: slot.column }}
-          >
-            {number}
-          </span>
-        );
-      })}
-    </div>
-  );
-}
 
 export function TowerView({ tower }: { tower: TowerDetail }) {
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [floorNumber, setFloorNumber] = useState(tower.pisos[0]?.numero ?? null);
+  const activeFloor =
+    tower.pisos.find((floor) => floor.numero === floorNumber) ?? tower.pisos[0];
   const selected: TowerCompartment | null =
     tower.pisos
       .flatMap((floor) => floor.compartimientos)
@@ -102,7 +84,12 @@ export function TowerView({ tower }: { tower: TowerDetail }) {
                     number={floor.numero}
                     compartments={floor.compartimientos}
                     selectedId={selectedId}
-                    onSelect={setSelectedId}
+                    active={activeFloor.numero === floor.numero}
+                    onSelectFloor={setFloorNumber}
+                    onSelect={(id) => {
+                      setFloorNumber(floor.numero);
+                      setSelectedId(id);
+                    }}
                   />
                 ))}
               </div>
@@ -117,36 +104,15 @@ export function TowerView({ tower }: { tower: TowerDetail }) {
           )}
         </section>
 
-        <aside className="tower-help" aria-label="Guía de lectura">
-          <div className="tower-help-block">
-            <span className="tower-help-icon">
-              <ArrowUp size={20} aria-hidden="true" />
-            </span>
-            <h3>De arriba hacia abajo</h3>
-            <p>
-              El piso más alto aparece primero. La base de la torre corresponde
-              al piso 1.
-            </p>
-          </div>
-          <div className="tower-help-divider" />
-          <div className="tower-help-block">
-            <p className="eyebrow">VISTA SUPERIOR</p>
-            <h3>Orden horario</h3>
-            <div className="orientation-help">
-              <OrientationKey />
-              <p>
-                Los números 1 a 4 siguen el sentido horario. El código físico no
-                cambia.
-              </p>
-            </div>
-          </div>
-          <div className="tower-help-tip">
-            <MousePointer2 size={18} aria-hidden="true" />
-            <span>
-              Toca una ubicación para consultar sus productos y cantidades.
-            </span>
-          </div>
-        </aside>
+        {activeFloor && (
+          <TowerTopView
+            floors={tower.pisos}
+            activeFloor={activeFloor}
+            selectedId={selectedId}
+            onSelectFloor={setFloorNumber}
+            onSelect={setSelectedId}
+          />
+        )}
       </div>
 
       <CompartmentDetail

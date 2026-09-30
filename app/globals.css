@@ -797,8 +797,8 @@ a {
   background: transparent;
   color: #819794;
   padding: 7px;
-  min-width: 40px;
-  min-height: 40px;
+  min-width: 44px;
+  min-height: 44px;
   display: grid;
   place-items: center;
 }
