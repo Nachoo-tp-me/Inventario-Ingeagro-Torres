@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Inventario Ingeagro Torres",
-  description: "Aplicación web de Ingeagro Torres",
+  title: "Inventario Ingeagro",
+  description: "Gestión del inventario físico de Ingeagro",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
