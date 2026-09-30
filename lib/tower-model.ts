@@ -38,28 +38,13 @@ export type TowerDetail = TowerRow & {
   pisos: { numero: number; compartimientos: TowerCompartment[] }[];
 };
 
-function getPhotoUrl(path: string | null, supabaseOrigin: string) {
-  if (!path) return null;
-  try {
-    const url = new URL(path);
-    // Aún no hay bucket definido. Solo se muestran URLs públicas del proyecto.
-    return url.protocol === "https:" &&
-      url.origin === supabaseOrigin &&
-      url.pathname.startsWith("/storage/v1/object/public/")
-      ? url.href
-      : null;
-  } catch {
-    return null;
-  }
-}
-
 export function buildTowerDetail(
   tower: TowerRow,
   compartments: CompartmentRow[],
   stock: StockRow[],
   products: ProductRow[],
   categories: CategoryRow[],
-  supabaseOrigin: string,
+  imageUrls: Map<string, string>,
 ): TowerDetail {
   const productsById = new Map(
     products.map((product) => [product.id, product]),
@@ -89,7 +74,7 @@ export function buildTowerDetail(
         nombre: product.nombre,
         categoria,
         cantidad: row.cantidad,
-        fotoUrl: getPhotoUrl(product.foto_ruta, supabaseOrigin),
+        fotoUrl: product.foto_ruta ? imageUrls.get(product.foto_ruta) ?? null : null,
       };
     });
     productos.sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));

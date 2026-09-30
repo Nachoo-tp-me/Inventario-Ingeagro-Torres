@@ -1,4 +1,5 @@
 import { requireAuthorizedUser } from "@/lib/auth";
+import { getSignedProductImages } from "@/lib/product-catalog";
 import {
   buildTowerDetail,
   type CategoryRow,
@@ -76,12 +77,14 @@ export async function getTowerDetail(
     categoryRows.push(...((data ?? []) as CategoryRow[]));
   }
 
+  const imageUrls = await getSignedProductImages(productRows.map((row) => row.foto_ruta));
+
   return buildTowerDetail(
     tower as TowerRow,
     compartmentRows,
     stockRows,
     productRows,
     categoryRows,
-    new URL(process.env.NEXT_PUBLIC_SUPABASE_URL!).origin,
+    imageUrls,
   );
 }

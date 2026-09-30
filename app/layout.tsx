@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import "@/components/tower-view.css";
 import "./theme.css";
+import "./catalog.css";
 
 const themeScript = `try{var theme=localStorage.getItem("ingeagro-theme");if(theme==="dark"||theme==="light")document.documentElement.dataset.theme=theme}catch(e){}`;
 

@@ -98,7 +98,7 @@ export function CompartmentDetail({
                   <article className="sheet-product" key={product.id}>
                     <div className="product-photo">
                       {product.fotoUrl ? (
-                        // El origen está limitado a las fotos públicas del proyecto Supabase.
+                        // URL firmada del bucket privado.
                         // eslint-disable-next-line @next/next/no-img-element
                         <img src={product.fotoUrl} alt="" loading="lazy" />
                       ) : (
