@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import "@/components/tower-view.css";
 
 export const metadata: Metadata = {
   title: "Inventario Ingeagro",
