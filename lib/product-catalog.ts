@@ -13,7 +13,7 @@ export type Product = {
   stock: number;
   ubicaciones: number;
 };
-export type ProductLocation = { codigo: string; cantidad: number };
+export type ProductLocation = { id: number; codigo: string; cantidad: number };
 
 type ProductRow = {
   id: string;
@@ -132,13 +132,14 @@ export async function getProduct(id: string) {
     getSignedProductImages([row.foto_ruta]),
     supabase
       .from("inventario")
-      .select("cantidad,compartimientos(codigo)")
+      .select("cantidad,compartimiento_id,compartimientos(codigo)")
       .eq("producto_id", id)
       .gt("cantidad", 0),
   ]);
   if (locationsResult.error) throw locationsResult.error;
   const locations = (locationsResult.data ?? [])
     .map((item) => ({
+      id: item.compartimiento_id,
       codigo: (item.compartimientos as unknown as { codigo: string } | null)?.codigo ?? "Ubicación desconocida",
       cantidad: item.cantidad,
     }))

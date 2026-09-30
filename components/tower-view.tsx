@@ -7,8 +7,13 @@ import { CompartmentDetail } from "@/components/compartment-detail";
 import { TowerFloor } from "@/components/tower-floor";
 import { TowerTopView } from "@/components/tower-top-view";
 import type { TowerDetail, TowerCompartment } from "@/lib/tower-model";
+import type { CompartmentOption, ProductOption } from "@/lib/stock-model";
 
-export function TowerView({ tower }: { tower: TowerDetail }) {
+export function TowerView({ tower, compartments, products }: {
+  tower: TowerDetail;
+  compartments: CompartmentOption[];
+  products: ProductOption[];
+}) {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [floorNumber, setFloorNumber] = useState(tower.pisos[0]?.numero ?? null);
   const activeFloor =
@@ -118,6 +123,8 @@ export function TowerView({ tower }: { tower: TowerDetail }) {
       <CompartmentDetail
         compartment={selected}
         towerCode={tower.codigo}
+        compartments={compartments}
+        products={products}
         onClose={() => setSelectedId(null)}
       />
     </div>

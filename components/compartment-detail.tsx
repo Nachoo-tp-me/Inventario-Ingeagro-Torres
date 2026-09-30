@@ -1,19 +1,33 @@
 "use client";
 
-import { useEffect, useRef } from "react";
-import { Boxes, Check, MapPin, Package, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Boxes, Check, MapPin, Package, Plus, X } from "lucide-react";
 import type { TowerCompartment } from "@/lib/tower-model";
+import type { CompartmentOption, ProductOption } from "@/lib/stock-model";
+import { StockActionMenu, StockOperationDialog, type StockOperationStart } from "@/components/stock-operation";
 
 export function CompartmentDetail({
   compartment,
   towerCode,
+  compartments,
+  products,
   onClose,
 }: {
   compartment: TowerCompartment | null;
   towerCode: string;
+  compartments: CompartmentOption[];
+  products: ProductOption[];
   onClose: () => void;
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const [operation, setOperation] = useState<StockOperationStart | null>(null);
+  const [notice, setNotice] = useState("");
+
+  function closeSheet() {
+    setOperation(null);
+    setNotice("");
+    onClose();
+  }
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -36,9 +50,11 @@ export function CompartmentDetail({
       ref={dialogRef}
       className="compartment-dialog"
       aria-labelledby="compartment-dialog-title"
-      onClose={onClose}
+      onClose={(event) => {
+        if (event.target === event.currentTarget) closeSheet();
+      }}
       onClick={(event) => {
-        if (event.target === event.currentTarget) onClose();
+        if (event.target === event.currentTarget) closeSheet();
       }}
     >
       {compartment && (
@@ -52,7 +68,7 @@ export function CompartmentDetail({
             <button
               type="button"
               className="sheet-close"
-              onClick={onClose}
+              onClick={closeSheet}
               aria-label="Cerrar detalle de compartimiento"
               autoFocus
             >
@@ -87,6 +103,8 @@ export function CompartmentDetail({
             </div>
           </div>
 
+          {notice && <p className="catalog-message success" role="status">{notice}</p>}
+
           {compartment.ocupado ? (
             <section
               className="sheet-products"
@@ -118,6 +136,16 @@ export function CompartmentDetail({
                       </strong>
                       <span>unid.</span>
                     </div>
+                    <StockActionMenu onSelect={(tipo) => {
+                      setNotice("");
+                      setOperation({
+                        tipo,
+                        productoId: product.id,
+                        origenId: tipo === "entrada" ? undefined : compartment.id,
+                        destinoId: tipo === "entrada" ? compartment.id : undefined,
+                        currentStock: product.cantidad,
+                      });
+                    }} />
                   </article>
                 ))}
               </div>
@@ -129,7 +157,25 @@ export function CompartmentDetail({
               </div>
               <h3>Compartimiento disponible</h3>
               <p>Esta ubicación no contiene productos por ahora.</p>
+              <button type="button" className="catalog-button primary sheet-stock-add" onClick={() => {
+                setNotice("");
+                setOperation({ tipo: "entrada", destinoId: compartment.id });
+              }}><Plus size={18} aria-hidden="true" /> Agregar producto</button>
             </div>
+          )}
+          {compartment.ocupado && <button type="button" className="catalog-button sheet-stock-add" onClick={() => {
+            setNotice("");
+            setOperation({ tipo: "entrada", destinoId: compartment.id });
+          }}><Plus size={17} aria-hidden="true" /> Agregar otro producto</button>}
+          {operation && (
+            <StockOperationDialog
+              key={`${operation.tipo}-${operation.productoId ?? "select"}`}
+              operation={operation}
+              products={products}
+              compartments={compartments}
+              onClose={() => setOperation(null)}
+              onSuccess={setNotice}
+            />
           )}
         </div>
       )}

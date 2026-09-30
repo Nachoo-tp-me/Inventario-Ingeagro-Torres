@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, MapPin, Package, Pencil } from "lucide-react";
+import { ArrowLeft, Package, Pencil } from "lucide-react";
 import { getProduct } from "@/lib/product-catalog";
+import { getCompartments } from "@/lib/stock-data";
+import { ProductStockControls } from "@/components/product-stock-controls";
 
 export default async function ProductDetailPage({
   params,
@@ -11,7 +13,7 @@ export default async function ProductDetailPage({
   searchParams: Promise<{ guardado?: string }>;
 }) {
   const { id } = await params;
-  const detail = await getProduct(id);
+  const [detail, compartments] = await Promise.all([getProduct(id), getCompartments()]);
   if (!detail) notFound();
   const { product, locations } = detail;
   const { guardado } = await searchParams;
@@ -45,21 +47,11 @@ export default async function ProductDetailPage({
           </div>
         </div>
       </div>
-      <section className="catalog-locations" aria-labelledby="catalog-locations-title">
-        <div className="catalog-section-heading">
-          <div><p className="eyebrow">INVENTARIO</p><h2 id="catalog-locations-title">Ubicaciones actuales</h2></div>
-          <span>Solo lectura</span>
-        </div>
-        {locations.length === 0 ? (
-          <div className="catalog-no-stock"><MapPin size={24} aria-hidden="true" /><p>Sin stock asignado</p></div>
-        ) : (
-          <ul className="catalog-location-list">
-            {locations.map((location) => (
-              <li key={location.codigo}><span><MapPin size={18} aria-hidden="true" /> {location.codigo}</span><strong>{location.cantidad.toLocaleString("es-CL")} unidades</strong></li>
-            ))}
-          </ul>
-        )}
-      </section>
+      <ProductStockControls
+        product={{ id: product.id, nombre: product.nombre, categoria: product.categoria }}
+        locations={locations}
+        compartments={compartments}
+      />
     </div>
   );
 }
