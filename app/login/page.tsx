@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { LoginForm } from "@/components/login-form";
 import { AUTHORIZED_USER_ID } from "@/lib/authorized-user";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 export default async function LoginPage({
   searchParams,
@@ -48,6 +49,9 @@ export default async function LoginPage({
         <div className="login-pattern" aria-hidden="true" />
       </div>
       <div className="login-form-side">
+        <div className="login-theme-control">
+          <ThemeToggle />
+        </div>
         <div className="login-mobile-brand">
           <span className="brand-mark">
             <Boxes size={23} aria-hidden="true" />

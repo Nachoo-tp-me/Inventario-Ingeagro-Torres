@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { createSupabaseClient } from "@/lib/supabase/client";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 const links = [
   { href: "/", label: "Inicio", icon: ChartNoAxesCombined },
@@ -136,6 +137,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <span className="session-pill">
               <span /> Sesión activa
             </span>
+            <ThemeToggle />
             <SignOutButton compact />
           </div>
         </header>
