@@ -1,0 +1,11 @@
+.export-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+.export-card { display: flex; flex-direction: column; min-width: 0; border: 1px solid var(--line); border-radius: 16px; background: var(--catalog-surface); padding: 24px; }
+.export-icon { display: grid; place-items: center; width: 52px; height: 52px; border-radius: 13px; background: var(--catalog-soft); color: var(--green); }
+.export-card h2 { font-size: 22px; margin: 20px 0 7px; }
+.export-card p { min-height: 65px; margin: 0 0 20px; font-size: 13px; line-height: 1.5; color: var(--muted); }
+.export-card .catalog-button { margin-top: auto; width: 100%; min-height: 48px; }
+.export-note { color: var(--muted); font-size: 13px; line-height: 1.5; margin: 0; }
+.export-home-link { display: flex; align-items: center; gap: 9px; min-height: 46px; width: fit-content; max-width: 100%; color: var(--green); font-size: 14px; font-weight: 750; }
+.export-home-link svg:last-child { flex: none; }
+@media (max-width: 900px) { .export-grid { grid-template-columns: 1fr; } .export-card p { min-height: 0; } }
+@media (max-width: 380px) { .export-card { padding: 19px; } }

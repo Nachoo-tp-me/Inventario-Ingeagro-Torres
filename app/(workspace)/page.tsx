@@ -1,5 +1,5 @@
 import { Suspense } from "react";
-import { ArrowRight, ShieldCheck, Zap } from "lucide-react";
+import { ArrowRight, Download, ShieldCheck, Zap } from "lucide-react";
 import Link from "next/link";
 import {
   Metrics,
@@ -62,6 +62,7 @@ export default function HomePage() {
       </div>
       <Link href="/carga" className="rapid-home-link"><Zap size={23} aria-hidden="true" /><span><strong>Carga rápida</strong><small>Registra productos mientras recorres las torres</small></span><ArrowRight size={19} aria-hidden="true" /></Link>
       <GlobalSearch />
+      <Link href="/exportaciones" className="export-home-link"><Download size={19} aria-hidden="true" /> Exportar inventario: CSV, Excel o mapa PNG <ArrowRight size={17} aria-hidden="true" /></Link>
       <Suspense
         fallback={
           <div

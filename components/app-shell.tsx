@@ -9,6 +9,7 @@ import {
   Layers3,
   LogOut,
   PackageSearch,
+  Zap,
 } from "lucide-react";
 import { useState } from "react";
 import { createSupabaseClient } from "@/lib/supabase/client";
@@ -18,6 +19,7 @@ const links = [
   { href: "/", label: "Inicio", icon: ChartNoAxesCombined },
   { href: "/torres", label: "Torres", icon: Layers3 },
   { href: "/productos", label: "Productos", icon: PackageSearch },
+  { href: "/carga", label: "Carga rápida", mobileLabel: "Carga", icon: Zap },
   { href: "/historial", label: "Historial", icon: Clock3 },
 ];
 
@@ -28,7 +30,7 @@ function Navigation({ mobile = false }: { mobile?: boolean }) {
       className={mobile ? "mobile-navigation" : "side-navigation"}
       aria-label="Navegación principal"
     >
-      {links.map(({ href, label, icon: Icon }) => {
+      {links.map(({ href, label, icon: Icon, ...rest }) => {
         const active =
           href === "/" ? pathname === "/" : pathname.startsWith(href);
         return (
@@ -39,7 +41,7 @@ function Navigation({ mobile = false }: { mobile?: boolean }) {
             aria-current={active ? "page" : undefined}
           >
             <Icon aria-hidden="true" size={20} strokeWidth={1.9} />
-            <span>{label}</span>
+            <span>{mobile && "mobileLabel" in rest ? rest.mobileLabel : label}</span>
           </Link>
         );
       })}

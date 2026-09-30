@@ -857,6 +857,11 @@ a {
     width: 210px;
   }
 }
+@media (min-width: 761px) and (max-width: 820px) {
+  .session-pill {
+    display: none;
+  }
+}
 @media (max-width: 760px) {
   .sidebar {
     display: none;
@@ -935,7 +940,7 @@ a {
   }
   .mobile-navigation {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     position: fixed;
     bottom: 0;
     left: 0;

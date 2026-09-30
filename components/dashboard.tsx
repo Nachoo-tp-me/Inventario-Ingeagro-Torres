@@ -66,14 +66,14 @@ export function Metrics({ data }: { data: DashboardSummary }) {
       <MetricCard
         label="Ocupados"
         value={data.ocupados}
-        detail="Con stock disponible"
+        detail="Con stock registrado"
         icon={Boxes}
         tone="red"
       />
       <MetricCard
         label="Disponibles"
         value={data.disponibles}
-        detail="Sin productos activos"
+        detail="Sin stock registrado"
         icon={Warehouse}
         tone="green"
       />
