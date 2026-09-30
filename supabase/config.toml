@@ -3,3 +3,8 @@ project_id = "inventario-ingeagro-torres"
 [db.seed]
 enabled = true
 sql_paths = ["./seed.sql"]
+
+[auth]
+site_url = "https://inventario-ingeagro-torres.netlify.app"
+additional_redirect_urls = ["http://localhost:3000/**", "https://inventario-ingeagro-torres.netlify.app/**"]
+enable_signup = false

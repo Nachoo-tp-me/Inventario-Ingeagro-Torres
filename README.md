@@ -35,8 +35,10 @@ Comandos: `npm run build`, `npm run lint`, `npm test` y `npm run test:db`. Las m
 
 Conectar este repositorio GitHub a Netlify Free, con `main` como rama de producción. Netlify detecta Next.js y usa su adaptador OpenNext automáticamente; no hace falta fijar la versión del adaptador ni añadir `netlify.toml`. La conexión Git despliega automáticamente los futuros pushes a `main`. El plan Free permite proyectos comerciales, sujeto a sus límites de uso.
 
+Sitio de producción: <https://inventario-ingeagro-torres.netlify.app>. La visibilidad de producción en Netlify debe ser **Public** para abrir `/login` sin cuenta Netlify; la aplicación exige el login de Supabase para consultar el inventario.
+
 Configurar para producción únicamente `NEXT_PUBLIC_SUPABASE_URL` y `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` desde el entorno local. Estas dos variables deben estar disponibles durante el build y en el runtime de funciones. Volver a desplegar si cambian. No subir `.env.local` ni configurar claves `service_role`, contraseñas o tokens.
 
-En Supabase Auth, mantener deshabilitado el registro de usuarios nuevos. Después de obtener la URL HTTPS definitiva, configurar **Authentication → URL Configuration → Site URL** con esa URL exacta. Si se usan redirecciones de correo, añadir esa URL exacta a **Redirect URLs** y, si hace falta para desarrollo, `http://localhost:3000/**`. El login actual usa correo y contraseña directamente y no depende de una ruta de callback. Mantener RLS, la identidad autorizada y el bucket privado existentes.
+En Supabase Auth, `supabase/config.toml` declara la URL de producción como **Site URL**, permite redirecciones de producción y localhost, y mantiene deshabilitado el registro público. `npx supabase config diff` permite revisar cambios antes de aplicar `npx supabase config push`; las demás propiedades remotas no declaradas permanecen intactas. El login usa correo y contraseña directamente. Mantener RLS, la identidad autorizada y el bucket privado existentes.
 
 En Android o escritorio se puede usar la opción de instalación del navegador. En iPhone/iPad: Safari → Compartir → Añadir a pantalla de inicio. La V1 no tiene service worker ni caché de inventario: **siempre requiere Internet**.
