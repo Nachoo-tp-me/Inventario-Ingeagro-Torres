@@ -31,11 +31,11 @@ Comandos: `npm run build`, `npm run lint`, `npm test` y `npm run test:db`. Las m
 - Carga rápida sigue las posiciones 1 → 2 → 3 → 4 y luego baja al piso siguiente. La última posición se guarda solo en el dispositivo.
 - Exportar inventario descarga CSV, XLSX o PNG directamente al dispositivo. Los productos sin stock aparecen en CSV/XLSX con cantidad 0 y ubicación vacía. No se suben archivos exportados a Storage.
 
-## Despliegue en Vercel
+## Despliegue en Netlify
 
-Importar este repositorio GitHub en Vercel como proyecto Next.js, con raíz en este directorio y `main` como rama de producción. Una integración Git activa despliega los futuros pushes a `main` automáticamente. Configurar en el entorno **Production** solo `NEXT_PUBLIC_SUPABASE_URL` y `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, y volver a desplegar si se modifican. No cargar `.env.local` a Vercel.
+Conectar este repositorio GitHub a Netlify Free, con `main` como rama de producción. Netlify detecta Next.js y usa su adaptador OpenNext automáticamente; no hace falta fijar la versión del adaptador ni añadir `netlify.toml`. La conexión Git despliega automáticamente los futuros pushes a `main`. El plan Free permite proyectos comerciales, sujeto a sus límites de uso.
 
-El plan gratuito Hobby de Vercel está limitado a uso personal no comercial. Un inventario de empresa requiere un plan elegible, como Pro; verificar el plan antes de publicar.
+Configurar para producción únicamente `NEXT_PUBLIC_SUPABASE_URL` y `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` desde el entorno local. Estas dos variables deben estar disponibles durante el build y en el runtime de funciones. Volver a desplegar si cambian. No subir `.env.local` ni configurar claves `service_role`, contraseñas o tokens.
 
 En Supabase Auth, mantener deshabilitado el registro de usuarios nuevos. Después de obtener la URL HTTPS definitiva, configurar **Authentication → URL Configuration → Site URL** con esa URL exacta. Si se usan redirecciones de correo, añadir esa URL exacta a **Redirect URLs** y, si hace falta para desarrollo, `http://localhost:3000/**`. El login actual usa correo y contraseña directamente y no depende de una ruta de callback. Mantener RLS, la identidad autorizada y el bucket privado existentes.
 
