@@ -2,7 +2,8 @@
 
 import { requireAuthorizedUser } from "@/lib/auth";
 import { getSignedProductImages } from "@/lib/product-catalog";
-import { comparableProductName, normalizeLocationCode } from "@/lib/rapid-model";
+import { matchesCatalogQuery, matchesNormalizedCatalogQuery, normalizeCatalogSearch, normalizeLocationCode } from "@/lib/rapid-model";
+import { createSearchMetadataCache } from "@/lib/search-metadata-cache";
 
 export type SearchProduct = {
   id: string; nombre: string; categoria: string; fotoUrl: string | null;
@@ -17,7 +18,19 @@ export type SearchResult = {
 };
 
 const empty: SearchResult = { products: [], location: null, locationAttempt: false };
-const escapeLike = (value: string) => value.replace(/[\\%_]/g, "\\$&");
+type SearchMetadata = { id: string; nombre: string; normalizedName: string; normalizedCategory: string };
+// This app authorizes a single fixed account. The cache stays in the server
+// process and is accessed only AFTER requireAuthorizedUser, on every request.
+// Limitaciones conocidas de V1 (B3):
+// - Cada proceso/instancia mantiene su propia caché; no hay coordinación entre ellos.
+// - Su alcance es la cuenta autorizada única; no distingue usuarios, roles ni permisos.
+// - Nuevos productos o nuevas coincidencias pueden esperar los 15 segundos de vigencia
+//   y la siguiente recarga bajo demanda; no hay invalidación inmediata por cambios.
+// - La revalidación descarta candidatos eliminados o que dejaron de coincidir, sin
+//   rellenar sus puestos: puede devolver menos de 25 resultados hasta la recarga.
+// - No hay límite explícito de filas/bytes; el TTL no libera automáticamente la memoria.
+const readSearchMetadata = createSearchMetadataCache<SearchMetadata[]>();
+const RESULT_LIMIT = 25;
 
 export async function searchInventory(rawQuery: string): Promise<SearchResult> {
   const supabase = await requireAuthorizedUser();
@@ -25,36 +38,48 @@ export async function searchInventory(rawQuery: string): Promise<SearchResult> {
   if (!query) return empty;
   const code = normalizeLocationCode(query);
   const locationAttempt = /^C\d+$/i.test(code);
-  const folded = comparableProductName(query);
-  const pattern = `%${escapeLike(query)}%`;
+  const folded = normalizeCatalogSearch(query);
+  if (!folded && !locationAttempt) return empty;
 
-  const [names, normalized, categories, compartment] = await Promise.all([
-    supabase.from("productos").select("id,nombre,categoria_id,foto_ruta,categorias(nombre)")
-      .ilike("nombre", pattern).order("nombre").limit(25),
-    folded ? supabase.from("productos").select("id,nombre,categoria_id,foto_ruta,categorias(nombre)")
-      .ilike("nombre_normalizado", `%${escapeLike(folded)}%`).order("nombre").limit(25)
-      : Promise.resolve({ data: [], error: null }),
-    supabase.from("categorias").select("id").ilike("nombre", pattern).limit(20),
+  const [metadata, compartment] = await Promise.all([
+    readSearchMetadata(async () => {
+      const all: SearchMetadata[] = [];
+      for (let start = 0; ; start += 1000) {
+        const { data, error } = await supabase.from("productos")
+          .select("id,nombre,categorias(nombre)").order("id").range(start, start + 999);
+        if (error) throw error;
+        for (const row of data ?? []) {
+          all.push({
+            id: row.id, nombre: row.nombre,
+            normalizedName: normalizeCatalogSearch(row.nombre),
+            normalizedCategory: normalizeCatalogSearch((row.categorias as unknown as { nombre: string } | null)?.nombre ?? "Sin categoría"),
+          });
+        }
+        if (!data || data.length < 1000) break;
+      }
+      return all;
+    }),
     locationAttempt ? supabase.from("compartimientos")
       .select("id,codigo,torre_id,piso,posicion").eq("codigo", code).maybeSingle()
       : Promise.resolve({ data: null, error: null }),
   ]);
-  for (const result of [names, normalized, categories, compartment]) if (result.error) throw result.error;
-  const categoryIds = (categories.data ?? []).map((item) => item.id);
-  const byCategory = categoryIds.length ? await supabase.from("productos")
-    .select("id,nombre,categoria_id,foto_ruta,categorias(nombre)")
-    .in("categoria_id", categoryIds).order("nombre").limit(25)
+  if (compartment.error) throw compartment.error;
+  const matchingIds = metadata
+    .filter((row) => matchesNormalizedCatalogQuery(row.normalizedName, row.normalizedCategory, folded))
+    .sort((a, b) => Number(b.normalizedName === folded) -
+      Number(a.normalizedName === folded) || a.nombre.localeCompare(b.nombre, "es") || a.id.localeCompare(b.id))
+    .slice(0, RESULT_LIMIT).map((row) => row.id);
+  // Refresh the selected metadata as well as stock/photos: removed or renamed
+  // products must not be returned just because they were in the snapshot.
+  const selected = matchingIds.length ? await supabase.from("productos")
+    .select("id,nombre,foto_ruta,categorias(nombre)").in("id", matchingIds)
     : { data: [], error: null };
-  if (byCategory.error) throw byCategory.error;
-
-  type Row = NonNullable<typeof names.data>[number];
-  const matches = new Map<string, Row>();
-  for (const row of [...(names.data ?? []), ...(normalized.data ?? []), ...(byCategory.data ?? [])])
-    matches.set(row.id, row);
-  const rows = [...matches.values()]
-    .sort((a, b) => Number(comparableProductName(b.nombre) === folded) -
-      Number(comparableProductName(a.nombre) === folded) || a.nombre.localeCompare(b.nombre, "es"))
-    .slice(0, 25);
+  if (selected.error) throw selected.error;
+  const rows = (selected.data ?? [])
+    .filter((row) => matchesCatalogQuery(row.nombre,
+      (row.categorias as unknown as { nombre: string } | null)?.nombre ?? "Sin categoría", query))
+    .sort((a, b) => Number(normalizeCatalogSearch(b.nombre) === folded) -
+      Number(normalizeCatalogSearch(a.nombre) === folded) || a.nombre.localeCompare(b.nombre, "es") || a.id.localeCompare(b.id));
   const ids = rows.map((row) => row.id);
   async function matchingStock() {
     if (!ids.length) return [] as { producto_id: string; cantidad: number; compartimientos: unknown }[];

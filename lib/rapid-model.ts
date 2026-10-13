@@ -36,10 +36,22 @@ export function similarProducts<T extends { id: string; nombre: string; nombre_n
 }
 
 export function matchesCatalogQuery(name: string, category: string, query: string): boolean {
-  const term = query.trim();
-  if (!term) return true;
-  const folded = comparableProductName(term);
-  return name.toLocaleLowerCase("es").includes(term.toLocaleLowerCase("es")) ||
-    category.toLocaleLowerCase("es").includes(term.toLocaleLowerCase("es")) ||
-    (!!folded && comparableProductName(name).includes(folded));
+  if (!query.trim()) return true;
+  const term = normalizeCatalogSearch(query);
+  return matchesNormalizedCatalogQuery(normalizeCatalogSearch(name), normalizeCatalogSearch(category), term);
+}
+
+export function matchesNormalizedCatalogQuery(name: string, category: string, term: string): boolean {
+  return !!term && (name.includes(term) || category.includes(term));
+}
+
+// Search rules are separate from duplicate warnings and exact location codes.
+// NFC preserves non-Latin marks and symbols used in technical product names.
+export function normalizeCatalogSearch(value: string): string {
+  return value.normalize("NFD").replace(/(\p{Script=Latin})\p{M}+/gu, "$1")
+    .normalize("NFC").toLocaleLowerCase("es")
+    // Preserve signs, numeric ranges and fractions used in technical names.
+    .replace(/(^|[\s(=:+]|\d)[\p{Dash_Punctuation}\u2212]\s*(?=\d)/gu, "$1\u2212")
+    .replace(/(\d)\s*[/\u2044]\s*(?=\d)/gu, "$1\u2044")
+    .replace(/[\s\p{Dash_Punctuation}_/\\]+/gu, "");
 }
