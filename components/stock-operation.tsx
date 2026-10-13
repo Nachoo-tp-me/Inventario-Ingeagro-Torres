@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Check, Package, Search, X } from "lucide-react";
 import { submitStockOperation } from "@/app/(workspace)/stock-actions";
+import { StockActionMenu } from "@/components/stock-action-menu";
 import {
   parseQuantity,
   validateStockOperation,
@@ -31,29 +32,7 @@ const TITLES: Record<StockOperationType, string> = {
 
 const subscribeToBrowser = () => () => {};
 
-export function StockActionMenu({
-  onSelect,
-  showEntry = true,
-}: {
-  onSelect: (tipo: StockOperationType) => void;
-  showEntry?: boolean;
-}) {
-  return (
-    <details className="stock-action-menu">
-      <summary>Acciones</summary>
-      <div className="stock-action-options">
-        {(["entrada", "retiro", "traslado", "ajuste"] as const)
-          .filter((tipo) => showEntry || tipo !== "entrada")
-          .map((tipo) => (
-            <button key={tipo} type="button" onClick={(event) => {
-              event.currentTarget.closest("details")?.removeAttribute("open");
-              onSelect(tipo);
-            }}>{tipo === "entrada" ? "Agregar" : tipo === "retiro" ? "Retirar" : tipo === "traslado" ? "Mover" : "Ajustar"}</button>
-          ))}
-      </div>
-    </details>
-  );
-}
+export { StockActionMenu };
 
 export function StockOperationDialog({
   operation,
@@ -84,8 +63,14 @@ export function StockOperationDialog({
   useEffect(() => {
     if (!isBrowser) return;
     const dialog = dialogRef.current;
+    const previousFocus = document.activeElement;
     if (dialog && !dialog.open) dialog.showModal();
-    return () => { if (dialog?.open) dialog.close(); };
+    return () => {
+      if (dialog?.open) dialog.close();
+      if (previousFocus instanceof HTMLElement && previousFocus.isConnected) {
+        previousFocus.focus({ preventScroll: true });
+      }
+    };
   }, [isBrowser]);
 
   const selectedProduct = products.find((item) => item.id === productId);

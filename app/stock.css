@@ -1,6 +1,5 @@
-.stock-action-menu { position: relative; flex: none; z-index: 2; }
-.stock-action-menu summary {
-  list-style: none;
+.stock-action-menu { flex: none; }
+.stock-action-trigger {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -14,21 +13,21 @@
   font-weight: 750;
   cursor: pointer;
 }
-.stock-action-menu summary::-webkit-details-marker { display: none; }
-.stock-action-menu[open] summary { background: var(--catalog-soft); }
+.stock-action-menu:has(:popover-open) .stock-action-trigger { background: var(--catalog-soft); }
 .stock-action-options {
-  position: absolute;
-  right: 0;
-  top: calc(100% + 4px);
-  z-index: 10;
-  min-width: 135px;
-  display: grid;
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  width: 135px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 5px;
   border: 1px solid var(--line);
   border-radius: 10px;
   background: var(--catalog-surface);
   box-shadow: 0 12px 28px #0b302a25;
 }
+.stock-action-options:popover-open { display: grid; }
 .stock-action-options button {
   min-height: 40px;
   padding: 9px 11px;
@@ -137,7 +136,7 @@
 @media (max-width: 380px) {
   .stock-location-main { flex-wrap: wrap; }
   .stock-location-actions { width: 100%; }
-  .stock-location-actions summary { width: 100%; }
+  .stock-location-actions .stock-action-trigger { width: 100%; }
   .sheet-product .stock-action-menu { width: 100%; }
-  .sheet-product .stock-action-menu summary { width: 100%; }
+  .sheet-product .stock-action-trigger { width: 100%; }
 }
