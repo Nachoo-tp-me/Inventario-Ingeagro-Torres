@@ -40,6 +40,7 @@
   --line: #355057;
   --canvas: #0c1d22;
   --green: #69d5a5;
+  --green-text: var(--green);
   --red: #f28a91;
   --surface: #183037;
   --surface-soft: #203b42;
@@ -58,6 +59,9 @@
 }
 :root[data-theme="dark"] .theme-toggle:hover {
   background: #2a5052;
+}
+:root[data-theme="dark"] .topbar-separator {
+  color: #a7b7b7;
 }
 :root[data-theme="dark"] .sidebar {
   background: #10282e;

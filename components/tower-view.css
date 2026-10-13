@@ -113,7 +113,7 @@
   gap: 16px;
   font-size: 11px;
   font-weight: 700;
-  color: #68807d;
+  color: var(--muted);
   white-space: nowrap;
 }
 .model-legend i {
@@ -200,7 +200,7 @@
   font-size: 9px;
   font-weight: 800;
   letter-spacing: 0.16em;
-  color: #789b92;
+  color: inherit;
 }
 .floor-label strong {
   font-size: 32px;
@@ -303,7 +303,7 @@
 .top-view-intro,
 .top-view-instruction {
   font-size: 12px;
-  color: #728785;
+  color: var(--muted);
   line-height: 1.5;
 }
 .top-view-intro {
@@ -484,7 +484,7 @@
   flex-wrap: wrap;
   gap: 7px;
   margin: 18px 0 24px;
-  color: #637c7b;
+  color: var(--muted);
   font-size: 12px;
   font-weight: 700;
 }
@@ -493,7 +493,7 @@
   flex: none;
 }
 .sheet-separator {
-  color: #9badaa;
+  color: var(--muted);
 }
 .sheet-status {
   display: flex;
@@ -574,7 +574,7 @@
 }
 .product-copy span {
   font-size: 11px;
-  color: #718482;
+  color: var(--muted);
 }
 .product-quantity {
   display: flex;
@@ -589,7 +589,7 @@
 }
 .product-quantity span {
   font-size: 10px;
-  color: #899b99;
+  color: var(--muted);
 }
 .sheet-empty {
   text-align: center;
@@ -611,7 +611,7 @@
 }
 .sheet-empty p {
   font-size: 13px;
-  color: #7c8c8b;
+  color: var(--muted);
   line-height: 1.5;
   margin: 0;
 }

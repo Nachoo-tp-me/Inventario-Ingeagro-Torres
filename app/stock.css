@@ -8,7 +8,7 @@
   border: 1px solid var(--line);
   border-radius: 9px;
   background: var(--catalog-surface);
-  color: var(--green);
+  color: var(--green-text);
   font-size: 12px;
   font-weight: 750;
   cursor: pointer;
@@ -91,14 +91,14 @@
 .stock-option-list small { color: var(--muted); font-size: 11px; }
 .stock-option-list > p { color: var(--muted); font-size: 13px; padding: 12px; margin: 0; }
 .stock-picker-hint { color: var(--muted); font-size: 11px; }
-.stock-picked { display: inline-flex; align-items: center; gap: 5px; margin: 0; color: var(--green); font-size: 12px; font-weight: 700; overflow-wrap: anywhere; }
+.stock-picked { display: inline-flex; align-items: center; gap: 5px; margin: 0; color: var(--green-text); font-size: 12px; font-weight: 700; overflow-wrap: anywhere; }
 .stock-available, .stock-delta { margin: -7px 0 0; color: var(--muted); font-size: 12px; }
 .stock-delta { color: var(--ink); font-weight: 750; }
 .stock-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; padding-top: 18px; border-top: 1px solid var(--line); }
 .stock-confirmation { display: grid; gap: 14px; }
 .stock-confirmation > p:first-child { margin: 0; color: var(--muted); font-size: 14px; }
 .stock-confirmation > strong { font-size: 17px; line-height: 1.4; overflow-wrap: anywhere; }
-.stock-confirm-route { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; border-radius: 10px; background: var(--catalog-soft); padding: 15px; color: var(--green); font-weight: 800; }
+.stock-confirm-route { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; border-radius: 10px; background: var(--catalog-soft); padding: 15px; color: var(--green-text); font-weight: 800; }
 .stock-confirm-route svg { flex: none; }
 .sheet-product { flex-wrap: wrap; }
 .sheet-product .stock-action-menu { margin-left: auto; }

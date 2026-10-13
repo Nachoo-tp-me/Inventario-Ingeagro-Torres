@@ -2,10 +2,11 @@
 
 :root {
   --ink: #183335;
-  --muted: #718186;
+  --muted: #596b70;
   --line: #e3e9e8;
   --canvas: #f5f8f7;
   --green: #168365;
+  --green-text: #26765e;
   --red: #d15e62;
 }
 * {
@@ -185,7 +186,7 @@ a {
   white-space: nowrap;
 }
 .topbar-separator {
-  color: #a7b7b7;
+  color: var(--muted);
   margin: 0 8px;
 }
 .topbar-right {
@@ -219,7 +220,7 @@ a {
 .page-heading .eyebrow,
 .eyebrow {
   margin: 0 0 10px;
-  color: #31876d;
+  color: var(--green-text);
   font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.17em;
@@ -332,7 +333,7 @@ a {
   cursor: default;
 }
 .search-preview input::placeholder {
-  color: #8e9ea0;
+  color: var(--muted);
 }
 .search-coming {
   font-size: 11px;
@@ -392,7 +393,7 @@ a {
   margin: 12px 0 7px;
 }
 .metric-card small {
-  color: #889899;
+  color: var(--muted);
   font-size: 11px;
 }
 .tower-section {
@@ -472,7 +473,7 @@ a {
 }
 .tower-kicker {
   display: block;
-  color: #8ca1a0;
+  color: var(--muted);
   font-size: 10px;
   letter-spacing: 0.15em;
   font-weight: 800;
@@ -510,7 +511,7 @@ a {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #2f8665;
+  color: var(--green-text);
   font-weight: 700;
   font-size: 12px;
 }
@@ -538,7 +539,7 @@ a {
   border-radius: 18px;
   padding: 45px 30px;
   text-align: center;
-  color: #6b8080;
+  color: var(--muted);
 }
 .empty-state svg {
   color: #478a75;
@@ -790,7 +791,7 @@ a {
   color: var(--ink);
 }
 .field-wrap input::placeholder {
-  color: #a2afaf;
+  color: var(--muted);
 }
 .password-toggle {
   border: 0;
@@ -836,7 +837,7 @@ a {
   border-top: 1px solid var(--line);
   margin-top: 34px;
   padding-top: 20px;
-  color: #8a9d9b;
+  color: var(--muted);
   font-size: 12px;
   text-align: center;
 }
@@ -959,9 +960,12 @@ a {
     gap: 3px;
     padding: 6px 0;
     border-radius: 9px;
-    color: #778a88;
+    color: var(--muted);
     font-size: 10px;
     font-weight: 700;
+  }
+  .mobile-navigation .nav-link:hover {
+    color: #fff;
   }
   .mobile-navigation .nav-link.active {
     background: #eaf5f0;
