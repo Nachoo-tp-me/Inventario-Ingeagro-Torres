@@ -33,19 +33,20 @@ export function GlobalSearch() {
     <div className="search-preview">
       <Search size={22} aria-hidden="true" />
       <input type="search" value={query} onChange={(event) => { setQuery(event.target.value); setResult(null); setLoading(false); setError(false); }}
-        placeholder="Producto, categoría o C264" aria-label="Buscar producto, categoría o ubicación"
+        placeholder="Producto, categoría o código de ubicación" aria-label="Buscar producto, categoría o ubicación"
         autoComplete="off" maxLength={100} />
       {loading && <span className="search-feedback" role="status">Buscando…</span>}
     </div>
     {query.trim() && <div className="global-search-results" aria-live="polite">
       {error ? <p className="catalog-message error" role="alert">No pudimos buscar. Inténtalo nuevamente.</p> : result && !loading ? <>
-        {result.location && <Link className="global-location-result" href={`/torres/${result.location.torre}?compartimiento=${result.location.codigo}`}>
+        {result.location && <Link className="global-location-result" href={result.location.href}>
           <MapPin size={24} aria-hidden="true" />
-          <span><strong>{result.location.codigo}</strong><small>Torre {result.location.torre} · Piso {result.location.piso} · Compartimiento {result.location.posicion}</small>
+          <span className="search-result-copy"><strong>{result.location.codigo}</strong><small>{result.location.context}</small>
+            {result.location.historical && <small>Código histórico: {result.location.matchedCode} · Código actual: {result.location.codigo}</small>}
             <small>{result.location.productos.length ? `Ocupado · ${result.location.productos.map((item) => `${item.nombre} ${item.cantidad}`).join(" · ")}` : "Disponible · Sin productos"}</small></span>
           <ArrowRight size={18} aria-hidden="true" />
         </Link>}
-        {result.locationAttempt && !result.location && <p className="search-empty">No encontramos esa ubicación.</p>}
+        {result.locationAttempt && !result.location && !result.products.length && <p className="search-empty">{/^C\d+$/i.test(query.trim()) ? "No encontramos esa ubicación." : <>No encontramos productos ni ubicaciones con ese código. <Link href="/productos/nuevo">Crear nuevo producto</Link></>}</p>}
         {result.products.length > 0 && <div className="search-product-list">{result.products.map((item) => <Link className="search-product-result" key={item.id} href={`/productos/${item.id}`}>
           <span className="search-result-photo">{item.fotoUrl ? (
             // URL firmada del bucket privado.

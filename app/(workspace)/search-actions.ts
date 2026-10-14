@@ -2,15 +2,17 @@
 
 import { requireAuthorizedUser } from "@/lib/auth";
 import { getSignedProductImages } from "@/lib/product-catalog";
-import { matchesCatalogQuery, matchesNormalizedCatalogQuery, normalizeCatalogSearch, normalizeLocationCode } from "@/lib/rapid-model";
+import { matchesCatalogQuery, matchesNormalizedCatalogQuery, normalizeCatalogSearch } from "@/lib/rapid-model";
 import { createSearchMetadataCache } from "@/lib/search-metadata-cache";
+import { normalizeSearchLocationCode, searchLocationHref } from "@/lib/location-search-model";
+import { isLocationId, physicalLocationContext, toPhysicalLocation, type PhysicalLocationOption } from "@/lib/stock-model";
 
 export type SearchProduct = {
   id: string; nombre: string; categoria: string; fotoUrl: string | null;
   stock: number; ubicaciones: number; principales: { codigo: string; cantidad: number }[];
 };
-export type SearchLocation = {
-  codigo: string; torre: string; piso: number; posicion: number;
+export type SearchLocation = PhysicalLocationOption & {
+  matchedCode: string; historical: boolean; href: string; context: string;
   productos: { nombre: string; cantidad: number }[];
 };
 export type SearchResult = {
@@ -36,12 +38,33 @@ export async function searchInventory(rawQuery: string): Promise<SearchResult> {
   const supabase = await requireAuthorizedUser();
   const query = typeof rawQuery === "string" ? rawQuery.trim().slice(0, 100) : "";
   if (!query) return empty;
-  const code = normalizeLocationCode(query);
-  const locationAttempt = /^C\d+$/i.test(code);
+  const code = normalizeSearchLocationCode(query);
+  const locationAttempt = code !== null;
   const folded = normalizeCatalogSearch(query);
   if (!folded && !locationAttempt) return empty;
 
-  const [metadata, compartment] = await Promise.all([
+  async function matchingLocation() {
+    if (code === null) return null;
+    // Registry ownership is permanent. Both reads use the authorized client,
+    // equality filters and at most one row; no physical codes enter the B3 cache.
+    const registry = await supabase.from("ubicacion_codigos")
+      .select("codigo,compartimiento_id").eq("codigo", code).maybeSingle();
+    if (registry.error) throw registry.error;
+    if (!registry.data) return null;
+    if (registry.data.codigo !== code || !isLocationId(registry.data.compartimiento_id))
+      throw new Error("Registro de ubicación inválido.");
+    const location = await supabase.from("compartimientos")
+      .select("id,codigo,tipo,torre_id,piso,estante_id,posicion")
+      .eq("id", registry.data.compartimiento_id).maybeSingle();
+    if (location.error) throw location.error;
+    // A missing/RLS-hidden location must never yield a fabricated link.
+    if (!location.data) return null;
+    if (location.data.id !== registry.data.compartimiento_id)
+      throw new Error("Ubicación de código inconsistente.");
+    return toPhysicalLocation(location.data);
+  }
+
+  const [metadata, place] = await Promise.all([
     readSearchMetadata(async () => {
       const all: SearchMetadata[] = [];
       for (let start = 0; ; start += 1000) {
@@ -59,11 +82,8 @@ export async function searchInventory(rawQuery: string): Promise<SearchResult> {
       }
       return all;
     }),
-    locationAttempt ? supabase.from("compartimientos")
-      .select("id,codigo,torre_id,piso,posicion").eq("codigo", code).maybeSingle()
-      : Promise.resolve({ data: null, error: null }),
+    matchingLocation(),
   ]);
-  if (compartment.error) throw compartment.error;
   const matchingIds = metadata
     .filter((row) => matchesNormalizedCatalogQuery(row.normalizedName, row.normalizedCategory, folded))
     .sort((a, b) => Number(b.normalizedName === folded) -
@@ -97,8 +117,8 @@ export async function searchInventory(rawQuery: string): Promise<SearchResult> {
   }
   const [stock, locationStock, images] = await Promise.all([
     matchingStock(),
-    compartment.data ? supabase.from("inventario")
-      .select("cantidad,productos(nombre)").eq("compartimiento_id", compartment.data.id)
+    place ? supabase.from("inventario")
+      .select("cantidad,productos(nombre)").eq("compartimiento_id", place.id)
       .gt("cantidad", 0).limit(100) : Promise.resolve({ data: [], error: null }),
     getSignedProductImages(rows.map((row) => row.foto_ruta)),
   ]);
@@ -120,13 +140,12 @@ export async function searchInventory(rawQuery: string): Promise<SearchResult> {
       principales: locations.sort((a, b) => b.cantidad - a.cantidad).slice(0, 3),
     };
   });
-  const place = compartment.data;
   return {
     products,
     locationAttempt,
     location: place ? {
-      codigo: place.codigo, torre: `C${place.torre_id}`, piso: place.piso,
-      posicion: place.posicion,
+      ...place, matchedCode: code!, historical: place.codigo !== code,
+      href: searchLocationHref(place), context: physicalLocationContext(place),
       productos: (locationStock.data ?? []).map((item) => ({
         nombre: (item.productos as unknown as { nombre: string } | null)?.nombre ?? "Producto",
         cantidad: item.cantidad,

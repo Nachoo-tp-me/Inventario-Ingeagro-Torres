@@ -174,6 +174,9 @@ test("Bloques 1/2/4: migraciones, stock, códigos, RLS y concurrencia en Postgre
       await t.test(`${database}: RPC de renombrado, mapa, auditoría, permisos y rollback`, async () => {
         t.diagnostic(summary(await sqlFile(database, "tests/box-code-rename.sql")));
       });
+      await t.test(`${database}: búsqueda de códigos actuales/históricos y RLS`, async () => {
+        t.diagnostic(summary(await sqlFile(database, "tests/location-search.sql")));
+      });
     }
 
     const database = "locations_a";
