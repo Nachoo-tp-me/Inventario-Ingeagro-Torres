@@ -11,7 +11,7 @@ test('renombrado, normalización, alias propios y rutas estables sin tocar stock
   const stock = structuredClone(state.tables.inventario);
   assert.equal((await renameBoxCode(input())).ok, true);
   assert.deepEqual(state.rpcs[0], { name: 'renombrar_codigo_caja', input: { p_ubicacion_id: 73, p_codigo_esperado: 'A1', p_codigo_nuevo: 'MOTORES_1' } });
-  assert.deepEqual(state.paths, ['/estantes', '/productos', '/productos/[id]', '/carga/ubicacion/73', '/carga', '/estantes/1']);
+  assert.deepEqual(state.paths, ['/estantes', '/productos', '/productos/[id]', '/carga/ubicacion/73', '/carga', '/historial', '/estantes/1']);
   const unchanged = await renameBoxCode({ ...input('MOTORES_1'), codigoEsperado: 'MOTORES_1' });
   assert.equal(unchanged.noChange, true);
   assert.equal(state.codeHistory.length, 1);
@@ -99,7 +99,7 @@ for (const [name, response] of invalidResponses) test(`respuesta no verificable:
   assert.equal(state.codeHistory.length, 1, 'La escritura puede haberse confirmado pese a la respuesta incorrecta');
   assert.equal(state.tables.compartimientos.find(row => row.id === 73).codigo, 'MOTORES_1');
   assert.deepEqual(state.tables.inventario, stock);
-  assert.deepEqual(state.paths, ['/estantes', '/productos', '/productos/[id]', '/carga/ubicacion/73', '/carga', '/estantes/[id]']);
+  assert.deepEqual(state.paths, ['/estantes', '/productos', '/productos/[id]', '/carga/ubicacion/73', '/carga', '/historial', '/estantes/[id]']);
 });
 
 test('sin_cambios debe ser true cuando ambos códigos normalizados coinciden', async () => {

@@ -54,6 +54,7 @@ export async function renameBoxCode(input: BoxCodeInput): Promise<BoxCodeResult>
   invalidate("/productos/[id]", "page");
   invalidate(`/carga/ubicacion/${input.ubicacionId}`);
   invalidate("/carga");
+  invalidate("/historial");
   const row = Array.isArray(data) && data.length === 1 ? data[0] : undefined;
   const validRow = row !== null && typeof row === "object" && !Array.isArray(row) &&
     row.ubicacion_id === input.ubicacionId && Number.isInteger(row.estante_id) &&

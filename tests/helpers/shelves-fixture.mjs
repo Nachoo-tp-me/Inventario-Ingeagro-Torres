@@ -12,6 +12,7 @@ const bundle = await build({
   stdin: { resolveDir: root, contents: `export * from './lib/shelf-data'; export * from './lib/inventory';
     export * from './app/(workspace)/stock-actions'; export * from './app/(workspace)/box-code-actions';
     export * from './lib/rapid-data'; export * from './app/(workspace)/rapid-actions';
+    export * from './lib/stock-data'; export {default as historyPage} from './app/(workspace)/historial/page';
     export {default as rapidStartPage} from './app/(workspace)/carga/page';
     export {default as rapidTowerPage} from './app/(workspace)/carga/[codigo]/page';
     export {default as rapidBoxPage} from './app/(workspace)/carga/ubicacion/[id]/page';
@@ -20,13 +21,14 @@ const bundle = await build({
   bundle: true, write: false, platform: "node", format: "iife", globalName: "shelves", jsx: "automatic",
   define: { "process.env.NODE_ENV": '"development"' },
   plugins: [{ name: "offline-services-only", setup(build) {
-    build.onResolve({ filter: /^(next\/(cache|navigation)|@\/lib\/(auth|product-catalog)|@\/components\/(dashboard|rapid-start|rapid-location|shelf-overview|shelf-view))$/ }, args => ({ path: args.path, namespace: "fake" }));
+    build.onResolve({ filter: /^(next\/(cache|navigation|link)|@\/lib\/(auth|product-catalog)|@\/components\/(dashboard|rapid-start|rapid-location|shelf-overview|shelf-view))$/ }, args => ({ path: args.path, namespace: "fake" }));
     build.onLoad({ filter: /.*/, namespace: "fake" }, args => ({ contents:
       args.path.endsWith('/auth') ? `export async function requireAuthorizedUser(){const state=globalThis.__fixture;
         state.authorizations++;if(state.denied)throw new Error('No autorizado');return state.client;}`
       : args.path.endsWith('/product-catalog') ? `export async function getSignedProductImages(paths){globalThis.__fixture.images.push(paths);
         return new Map(paths.filter(Boolean).map(path=>[path,'https://images.test/'+path]));} export async function getCategories(){globalThis.__fixture.authorizations++;if(globalThis.__fixture.denied)throw new Error('No autorizado');return globalThis.__fixture.tables.categorias;}`
       : args.path === 'next/cache' ? 'export function revalidatePath(path){globalThis.__fixture.paths.push(path);if(globalThis.__fixture.failInvalidation)throw new Error("Cache unavailable")}'
+      : args.path === 'next/link' ? 'export default function Link(){return null}'
       : args.path === 'next/navigation' ? "export function notFound(){throw new Error('NOT_FOUND')}export function redirect(path){throw new Error('REDIRECT:'+path)}"
       : args.path.endsWith('/rapid-location') ? 'export function RapidLocation(){return null}'
       : args.path.endsWith('/rapid-start') ? 'export function RapidStart(){return null}'
@@ -60,6 +62,7 @@ export function createShelfFixture() {
         { compartimiento_id: 73, producto_id: secondProductId, cantidad: 3 },
         { compartimiento_id: 96, producto_id: productId, cantidad: 12 },
       ],
+      movimientos: [],
     },
   };
   state.codeOwners = new Map(state.tables.compartimientos.map(row => [row.codigo, row.id]));

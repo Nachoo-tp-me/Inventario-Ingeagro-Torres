@@ -1,5 +1,7 @@
 import { requireAuthorizedUser } from "@/lib/auth";
 import { toPhysicalLocation, type CompartmentOption, type PhysicalLocationOption, type ProductOption } from "@/lib/stock-model";
+import { resolveHistoryLocation, type HistoryEntry } from "@/lib/history-model";
+export type { HistoryEntry } from "@/lib/history-model";
 
 const LOCATION_COLUMNS = "id,codigo,tipo,torre_id,piso,estante_id,posicion";
 
@@ -55,16 +57,6 @@ export async function getProductOptions(): Promise<ProductOption[]> {
   return options;
 }
 
-export type HistoryEntry = {
-  id: number;
-  fecha: string;
-  tipo: "entrada" | "retiro" | "traslado" | "ajuste";
-  cantidad: number;
-  producto: string;
-  origen: string | null;
-  destino: string | null;
-};
-
 const HISTORY_PAGE_SIZE = 50;
 
 export async function getHistory(page: number) {
@@ -72,7 +64,7 @@ export async function getHistory(page: number) {
   const start = (page - 1) * HISTORY_PAGE_SIZE;
   const { data, error } = await supabase
     .from("movimientos")
-    .select("id,fecha,tipo,cantidad,producto_id,origen_compartimiento_id,destino_compartimiento_id")
+    .select("id,fecha,tipo,cantidad,producto_id,origen_compartimiento_id,destino_compartimiento_id,codigo_origen,codigo_destino")
     .order("fecha", { ascending: false })
     .order("id", { ascending: false })
     .range(start, start + HISTORY_PAGE_SIZE);
@@ -88,23 +80,21 @@ export async function getHistory(page: number) {
       ? supabase.from("productos").select("id,nombre").in("id", productIds)
       : Promise.resolve({ data: [], error: null }),
     compartmentIds.length
-      ? supabase.from("compartimientos").select("id,codigo").in("id", compartmentIds)
+      ? supabase.from("compartimientos").select(LOCATION_COLUMNS).in("id", compartmentIds)
       : Promise.resolve({ data: [], error: null }),
   ]);
   if (productsResult.error) throw productsResult.error;
   if (compartmentsResult.error) throw compartmentsResult.error;
   const products = new Map((productsResult.data ?? []).map((item) => [item.id, item.nombre]));
-  const compartments = new Map((compartmentsResult.data ?? []).map((item) => [item.id, item.codigo]));
+  const compartments = new Map((compartmentsResult.data ?? []).map((item) => [item.id, toPhysicalLocation(item)]));
   const entries: HistoryEntry[] = visible.map((row) => ({
     id: row.id,
     fecha: row.fecha,
     tipo: row.tipo as HistoryEntry["tipo"],
     cantidad: row.cantidad,
     producto: products.get(row.producto_id) ?? "Producto no disponible",
-    origen: row.origen_compartimiento_id !== null
-      ? compartments.get(row.origen_compartimiento_id) ?? null : null,
-    destino: row.destino_compartimiento_id !== null
-      ? compartments.get(row.destino_compartimiento_id) ?? null : null,
+    origen: resolveHistoryLocation(row.origen_compartimiento_id, row.codigo_origen, compartments),
+    destino: resolveHistoryLocation(row.destino_compartimiento_id, row.codigo_destino, compartments),
   }));
   return { entries, hasNext: rows.length > HISTORY_PAGE_SIZE };
 }

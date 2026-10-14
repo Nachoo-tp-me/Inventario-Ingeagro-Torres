@@ -140,3 +140,9 @@
   .sheet-product .stock-action-menu { width: 100%; }
   .sheet-product .stock-action-trigger { width: 100%; }
 }
+.history-copy .history-location-link {
+  display: inline;
+  white-space: normal;
+  min-height: 0;
+  font-size: inherit;
+}
