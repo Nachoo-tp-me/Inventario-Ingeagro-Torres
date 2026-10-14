@@ -41,7 +41,7 @@ export async function getDashboardSummary(): Promise<DashboardSummary> {
   const [towersResult, compartmentsResult, productsResult, occupied] =
     await Promise.all([
       supabase.from("torres").select("id,codigo").order("id"),
-      supabase.from("compartimientos").select("id,torre_id"),
+      supabase.from("compartimientos").select("id,torre_id").eq("tipo", "compartimiento"),
       supabase.from("productos").select("id", { count: "exact", head: true }),
       getOccupiedCompartments(supabase),
     ]);

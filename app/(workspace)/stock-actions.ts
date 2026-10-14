@@ -21,6 +21,15 @@ function friendlyStockError(code?: string): string {
   return "No fue posible completar el movimiento. Inténtalo nuevamente.";
 }
 
+function invalidateStockView(path: string, type?: "page") {
+  try {
+    revalidatePath(path, type);
+  } catch {
+    // La escritura ya fue confirmada; un fallo de caché no debe inducir un reintento.
+    console.error("No se pudo invalidar una vista después de confirmar el movimiento.");
+  }
+}
+
 export async function submitStockOperation(input: StockOperationInput): Promise<StockActionResult> {
   const supabase = await requireAuthorizedUser();
   if (!input || typeof input !== "object")
@@ -28,8 +37,8 @@ export async function submitStockOperation(input: StockOperationInput): Promise<
   const validationError = validateStockOperation(input);
   if (validationError) return { ok: false, message: validationError };
 
+  let noChange = false;
   try {
-    let noChange = false;
     if (input.tipo === "ajuste") {
       const { data, error } = await supabase.rpc("registrar_ajuste_fisico", {
         p_producto_id: input.productoId,
@@ -58,28 +67,42 @@ export async function submitStockOperation(input: StockOperationInput): Promise<
       }
     }
 
-    revalidatePath("/");
-    revalidatePath("/torres");
-    revalidatePath("/productos");
-    revalidatePath("/historial");
-    revalidatePath("/carga");
-    revalidatePath(`/productos/${input.productoId}`);
-    const ids = [...new Set([input.origenId, input.destinoId].filter((id): id is number => !!id))];
-    if (ids.length) {
-      const { data } = await supabase.from("compartimientos").select("tipo,torre_id,estante_id,codigo").in("id", ids);
-      const towerLocations = (data ?? []).filter((row) => row.tipo === "compartimiento" && row.torre_id !== null);
-      for (const compartment of towerLocations) revalidatePath(`/carga/${compartment.codigo}`);
-      for (const towerId of new Set(towerLocations.map((row) => row.torre_id))) {
-        revalidatePath(`/torres/C${towerId}`);
-      }
-    }
-    return {
-      ok: true,
-      noChange,
-      message: noChange ? "El stock ya coincide con el conteo físico. No se registró un movimiento." : "Movimiento registrado correctamente.",
-    };
   } catch {
     console.error("Fallo inesperado al registrar movimiento");
     return { ok: false, message: "No fue posible completar el movimiento. Inténtalo nuevamente." };
   }
+
+  invalidateStockView("/");
+  invalidateStockView("/torres");
+  invalidateStockView("/productos");
+  invalidateStockView("/historial");
+  invalidateStockView("/carga");
+  invalidateStockView(`/productos/${input.productoId}`);
+  try {
+    const ids = [...new Set([input.origenId, input.destinoId].filter((id): id is number => !!id))];
+    if (ids.length) {
+      const { data, error } = await supabase.from("compartimientos").select("tipo,torre_id,estante_id,codigo").in("id", ids);
+      if (error) throw error;
+      const towerLocations = (data ?? []).filter((row) => row.tipo === "compartimiento" && row.torre_id !== null);
+      for (const compartment of towerLocations) invalidateStockView(`/carga/${compartment.codigo}`);
+      for (const towerId of new Set(towerLocations.map((row) => row.torre_id))) {
+        invalidateStockView(`/torres/C${towerId}`);
+      }
+      const shelfIds = new Set((data ?? []).filter((row) => row.tipo === "caja" && row.estante_id !== null).map((row) => row.estante_id));
+      if (shelfIds.size) invalidateStockView("/estantes");
+      for (const shelfId of shelfIds) invalidateStockView(`/estantes/${shelfId}`);
+    }
+  } catch {
+    // No registrar errores crudos, IDs, códigos, credenciales ni datos del producto.
+    console.error("No se pudieron consultar las ubicaciones después de confirmar el movimiento. Se aplica invalidación conservadora.");
+    invalidateStockView("/estantes");
+    invalidateStockView("/torres/[codigo]", "page");
+    invalidateStockView("/estantes/[id]", "page");
+    invalidateStockView("/carga/[codigo]", "page");
+  }
+  return {
+    ok: true,
+    noChange,
+    message: noChange ? "El stock ya coincide con el conteo físico. No se registró un movimiento." : "Movimiento registrado correctamente.",
+  };
 }

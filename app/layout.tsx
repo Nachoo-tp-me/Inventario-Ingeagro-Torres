@@ -7,6 +7,7 @@ import "./catalog.css";
 import "./stock.css";
 import "./rapid.css";
 import "./exports.css";
+import "./shelves.css";
 
 const themeScript = `try{var theme=localStorage.getItem("ingeagro-theme");if(theme==="dark"||theme==="light")document.documentElement.dataset.theme=theme}catch(e){}`;
 

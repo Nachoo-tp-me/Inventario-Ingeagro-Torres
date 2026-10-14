@@ -18,10 +18,14 @@ import { ThemeToggle } from "@/components/theme-toggle";
 const links = [
   { href: "/", label: "Inicio", icon: ChartNoAxesCombined },
   { href: "/torres", label: "Torres", icon: Layers3 },
+  { href: "/estantes", label: "Estantes", icon: Boxes },
   { href: "/productos", label: "Productos", icon: PackageSearch },
   { href: "/carga", label: "Carga rápida", mobileLabel: "Carga", icon: Zap },
   { href: "/historial", label: "Historial", icon: Clock3 },
 ];
+
+const mobileLinks = links.filter(link => link.href !== "/torres" && link.href !== "/estantes");
+mobileLinks.splice(2, 0, { href: "/ubicaciones", label: "Ubicaciones", icon: Layers3 });
 
 function Navigation({ mobile = false }: { mobile?: boolean }) {
   const pathname = usePathname();
@@ -30,9 +34,11 @@ function Navigation({ mobile = false }: { mobile?: boolean }) {
       className={mobile ? "mobile-navigation" : "side-navigation"}
       aria-label="Navegación principal"
     >
-      {links.map(({ href, label, icon: Icon, ...rest }) => {
+      {(mobile ? mobileLinks : links).map(({ href, label, icon: Icon, ...rest }) => {
         const active =
-          href === "/" ? pathname === "/" : pathname.startsWith(href);
+          href === "/" ? pathname === "/" : href === "/ubicaciones"
+            ? ["/ubicaciones", "/torres", "/estantes"].some(path => pathname.startsWith(path))
+            : pathname.startsWith(href);
         return (
           <Link
             key={href}
@@ -133,7 +139,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </Link>
           <div className="topbar-label">
             Inventario físico <span className="topbar-separator">/</span>{" "}
-            Gestión de torres
+            Gestión de ubicaciones
           </div>
           <div className="topbar-right">
             <span className="session-pill">

@@ -18,7 +18,12 @@ const bundle = await build({
   plugins: [{ name: "offline-only", setup(build) {
     build.onResolve({ filter: /^(@\/lib\/auth|next\/cache)$/ }, args => ({ path: args.path, namespace: "fake" }));
     build.onLoad({ filter: /.*/, namespace: "fake" }, args => ({ contents: args.path === "next/cache"
-      ? 'export function revalidatePath(path) { globalThis.__fixture.paths.push(path); }'
+      ? `export function revalidatePath(path, type) {
+          const state = globalThis.__fixture;
+          state.paths.push(path);
+          state.invalidations.push({ path, type });
+          if (path === state.failRevalidationPath) throw new Error('Fallo de caché simulado');
+        }`
       : `export async function requireAuthorizedUser() {
           const fixture = globalThis.__fixture;
           fixture.authCalls++;
@@ -36,7 +41,8 @@ const syntheticLocations = () => [
 ];
 
 function fixture() {
-  const state = { locations: syntheticLocations(), queries: [], writes: [], rpcs: [], paths: [], authCalls: 0, denied: false, error: null, queryError: null, noChange: false };
+  const state = { locations: syntheticLocations(), queries: [], writes: [], rpcs: [], paths: [], invalidations: [], logs: [], authCalls: 0,
+    denied: false, error: null, queryError: null, throwQuery: false, failRevalidationPath: null, noChange: false };
   state.client = {
     from(table) {
       const query = { table, columns: null, filters: [], orders: [] };
@@ -48,6 +54,7 @@ function fixture() {
         async insert(input) { state.writes.push({ table, input: structuredClone(input) }); return { error: state.error }; },
         then(resolve, reject) {
           state.queries.push(structuredClone(query));
+          if (state.throwQuery) return Promise.reject(state.queryError).then(resolve, reject);
           let rows = state.locations;
           for (const [column, value] of query.filters) rows = rows.filter(row => Array.isArray(value) ? value.includes(row[column]) : row[column] === value);
           return Promise.resolve({ data: state.queryError ? null : rows, error: state.queryError }).then(resolve, reject);
@@ -56,7 +63,7 @@ function fixture() {
     },
     async rpc(name, input) { state.rpcs.push({ name, input: structuredClone(input) }); return { data: state.noChange ? null : 123, error: state.error }; },
   };
-  const context = vm.createContext({ __fixture: state, console: { error() {} } });
+  const context = vm.createContext({ __fixture: state, console: { error(...values) { state.logs.push(values); } } });
   new vm.Script(bundle.outputFiles[0].text).runInContext(context);
   return { state, ...context.stock };
 }
@@ -121,6 +128,9 @@ test("acción real: siete operaciones conservan producto y IDs exactos", async t
     assert.deepEqual(state.queries[0].filters, [["id", ids]]);
     const towerIds = [...new Set(ids.filter(id => id <= 72).map(id => Math.floor((id - 1) / 24) + 1))];
     assert.deepEqual(state.paths.filter(path => path.startsWith('/torres/')), towerIds.map(id => `/torres/C${id}`));
+    const shelfIds = [...new Set(ids.filter(id => id > 72).map(id => Math.floor((id - 73) / 4) + 1))];
+    assert.deepEqual(state.paths.filter(path => path.startsWith('/estantes/')), shelfIds.map(id => `/estantes/${id}`));
+    assert.equal(state.paths.includes('/estantes'), shelfIds.length > 0);
   });
 });
 
@@ -154,4 +164,48 @@ test("invalidación no convierte una caja renombrada en ruta de torre/carga ráp
   assert.equal((await submitStockOperation({ tipo: "entrada", productoId: product, destinoId: 73, cantidad: 1 })).ok, true);
   assert.equal(state.paths.some(path => /\/torres\/|\/carga\//.test(path)), false);
   assert.equal(plain(state.queries[0]).columns, "tipo,torre_id,estante_id,codigo");
+});
+
+test("movimiento confirmado y consulta posterior fallida: éxito, invalidación conservadora y ninguna repetición", async t => {
+  for (const throwQuery of [false, true]) for (const tipo of ['traslado', 'ajuste']) {
+    await t.test(`${tipo}, ${throwQuery ? 'excepción' : 'error devuelto'}`, async () => {
+      const { state, submitStockOperation } = fixture();
+      state.queryError = new Error('SENSITIVE_JWT_FICTICIO');
+      state.throwQuery = throwQuery;
+      const input = tipo === 'ajuste'
+        ? { tipo, productoId: product, origenId: 73, cantidadFisica: 4, cantidadEsperada: 2 }
+        : { tipo, productoId: product, origenId: 73, destinoId: 96, cantidad: 1 };
+      const result = await submitStockOperation(input);
+      assert.equal(result.ok, true);
+      assert.equal(result.noChange, false);
+      assert.equal(result.message, 'Movimiento registrado correctamente.');
+      assert.equal(state.writes.length, tipo === 'ajuste' ? 0 : 1);
+      assert.equal(state.rpcs.length, tipo === 'ajuste' ? 1 : 0);
+      assert.equal(state.queries.length, 1);
+      assert.deepEqual(plain(state.invalidations.filter(item => item.type)), [
+        { path: '/torres/[codigo]', type: 'page' },
+        { path: '/estantes/[id]', type: 'page' },
+        { path: '/carga/[codigo]', type: 'page' },
+      ]);
+      assert.ok(state.paths.includes('/estantes'));
+      assert.ok(state.paths.includes(`/productos/${product}`));
+      assert.equal(state.paths.some(path => /^\/estantes\/\d|^\/torres\/C\d/.test(path)), false);
+      assert.deepEqual(plain(state.logs), [['No se pudieron consultar las ubicaciones después de confirmar el movimiento. Se aplica invalidación conservadora.']]);
+      assert.equal(JSON.stringify(state.logs).includes('SENSITIVE_JWT_FICTICIO'), false);
+      assert.equal(JSON.stringify(state.logs).includes(product), false);
+    });
+  }
+});
+
+test("un fallo de invalidación no convierte una escritura confirmada en fracaso ni impide intentar las demás vistas", async () => {
+  const { state, submitStockOperation } = fixture();
+  state.queryError = new Error('Consulta no disponible');
+  state.failRevalidationPath = '/torres/[codigo]';
+  const result = await submitStockOperation({ tipo: 'entrada', productoId: product, destinoId: 73, cantidad: 1 });
+  assert.equal(result.ok, true);
+  assert.equal(state.writes.length, 1);
+  assert.equal(state.rpcs.length, 0);
+  assert.ok(state.invalidations.some(item => item.path === '/estantes/[id]' && item.type === 'page'));
+  assert.ok(state.invalidations.some(item => item.path === '/carga/[codigo]' && item.type === 'page'));
+  assert.equal(state.logs.length, 2);
 });
