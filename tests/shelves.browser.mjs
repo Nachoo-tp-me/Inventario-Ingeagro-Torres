@@ -157,7 +157,7 @@ test('Estantes: seis mapas físicos, navegación y stock compartido en ambos tem
       assert.equal(new URL(page.url()).searchParams.get('caja'),'73');
       assert.match(await detail.locator('.sheet-location').innerText(),/Estante 1 · Superior izquierda/);
       assert.match(await detail.innerText(),/ESP32-S3/);
-      assert.equal(await detail.locator('a[href^="/carga/"]').count(),0);
+      assert.equal(await detail.getByRole('link',{name:'Cargar aquí'}).getAttribute('href'),'/carga/ubicacion/73');
       assert.equal(await page.evaluate(()=>document.body.style.overflow),'hidden');
       await page.screenshot({path:path.join(directory,`caja-${width}-${theme}.png`),fullPage:true});
       // Renombrado real de UI/acción, con persistencia simulada y stock intacto.

@@ -81,7 +81,7 @@ export async function submitStockOperation(input: StockOperationInput): Promise<
   try {
     const ids = [...new Set([input.origenId, input.destinoId].filter((id): id is number => !!id))];
     if (ids.length) {
-      const { data, error } = await supabase.from("compartimientos").select("tipo,torre_id,estante_id,codigo").in("id", ids);
+      const { data, error } = await supabase.from("compartimientos").select("id,tipo,torre_id,estante_id,codigo").in("id", ids);
       if (error) throw error;
       const towerLocations = (data ?? []).filter((row) => row.tipo === "compartimiento" && row.torre_id !== null);
       for (const compartment of towerLocations) invalidateStockView(`/carga/${compartment.codigo}`);
@@ -89,6 +89,7 @@ export async function submitStockOperation(input: StockOperationInput): Promise<
         invalidateStockView(`/torres/C${towerId}`);
       }
       const shelfIds = new Set((data ?? []).filter((row) => row.tipo === "caja" && row.estante_id !== null).map((row) => row.estante_id));
+      for (const box of (data ?? []).filter(row => row.tipo === "caja" && row.estante_id !== null && ids.includes(row.id))) invalidateStockView(`/carga/ubicacion/${box.id}`);
       if (shelfIds.size) invalidateStockView("/estantes");
       for (const shelfId of shelfIds) invalidateStockView(`/estantes/${shelfId}`);
     }
@@ -99,6 +100,7 @@ export async function submitStockOperation(input: StockOperationInput): Promise<
     invalidateStockView("/torres/[codigo]", "page");
     invalidateStockView("/estantes/[id]", "page");
     invalidateStockView("/carga/[codigo]", "page");
+    invalidateStockView("/carga/ubicacion/[id]", "page");
   }
   return {
     ok: true,

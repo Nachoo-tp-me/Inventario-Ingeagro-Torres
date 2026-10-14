@@ -1,7 +1,9 @@
 import { requireAuthorizedUser } from "@/lib/auth";
 import { getSignedProductImages } from "@/lib/product-catalog";
-import type { CompartmentOption } from "@/lib/stock-model";
-import type { TowerCompartment } from "@/lib/tower-model";
+import { isLocationId, toPhysicalLocation, type CompartmentOption, type PhysicalLocationOption } from "@/lib/stock-model";
+import type { RapidLocationContent } from "@/lib/rapid-navigation-model";
+import type { LocationContent } from "@/lib/location-content";
+import { normalizeSearchLocationCode } from "@/lib/location-search-model";
 
 type StockRow = {
   cantidad: number;
@@ -11,7 +13,29 @@ type StockRow = {
   } | null;
 };
 
-export async function getRapidCompartment(option: CompartmentOption): Promise<TowerCompartment> {
+export async function getRapidLocationByCode(raw: string): Promise<PhysicalLocationOption | null> {
+  const supabase = await requireAuthorizedUser();
+  if (typeof raw !== "string" || raw.length > 100) return null;
+  const code = normalizeSearchLocationCode(raw);
+  if (code === null) return null;
+  const registry = await supabase.from("ubicacion_codigos").select("codigo,compartimiento_id").eq("codigo", code).maybeSingle();
+  if (registry.error) throw registry.error;
+  if (!registry.data) return null;
+  if (registry.data.codigo !== code || !isLocationId(registry.data.compartimiento_id)) throw new Error("Registro de ubicación inválido.");
+  const location = await supabase.from("compartimientos").select("id,codigo,tipo,torre_id,piso,estante_id,posicion").eq("id", registry.data.compartimiento_id).maybeSingle();
+  if (location.error) throw location.error;
+  if (!location.data) return null;
+  if (location.data.id !== registry.data.compartimiento_id) throw new Error("Ubicación de código inconsistente.");
+  return toPhysicalLocation(location.data);
+}
+
+export async function getRapidCompartment(option: CompartmentOption): Promise<CompartmentOption & LocationContent> {
+  const location = await getRapidLocation(option);
+  if (location.tipo !== "compartimiento") throw new Error("Se esperaba un compartimiento de torre.");
+  return location;
+}
+
+export async function getRapidLocation(option: PhysicalLocationOption): Promise<RapidLocationContent> {
   const supabase = await requireAuthorizedUser();
   const rows: StockRow[] = [];
   for (let start = 0; ; start += 1000) {
@@ -33,6 +57,6 @@ export async function getRapidCompartment(option: CompartmentOption): Promise<To
       fotoUrl: item.productos.foto_ruta ? images.get(item.productos.foto_ruta) ?? null : null,
     };
   }).sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
-  return { id: option.id, codigo: option.codigo, piso: option.piso, posicion: option.posicion,
+  return { ...option,
     ocupado: productos.length > 0, productos };
 }

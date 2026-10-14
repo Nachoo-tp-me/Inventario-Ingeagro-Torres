@@ -7,18 +7,16 @@ import { ArrowLeft, ArrowRight, Check, MapPin, Package, Plus, Search } from "luc
 import { submitStockOperation } from "@/app/(workspace)/stock-actions";
 import { ProductForm } from "@/components/product-form";
 import { StockOperationDialog } from "@/components/stock-operation";
-import { LAST_RAPID_LOCATION } from "@/components/rapid-start";
+import { rapidLocationHref, rememberRapidLocation, type RapidAdjacent, type RapidLocationContent } from "@/lib/rapid-navigation-model";
 import type { Category } from "@/lib/product-catalog";
-import type { CompartmentOption, ProductOption } from "@/lib/stock-model";
-import { parseQuantity } from "@/lib/stock-model";
-import type { TowerCompartment } from "@/lib/tower-model";
-import type { adjacentCompartments } from "@/lib/rapid-model";
-
-type Adjacent = ReturnType<typeof adjacentCompartments>;
+import type { PhysicalLocationOption, ProductOption } from "@/lib/stock-model";
+import { parseQuantity, physicalLocationContext } from "@/lib/stock-model";
+import { searchLocationHref } from "@/lib/location-search-model";
+import { matchesCatalogQuery } from "@/lib/rapid-model";
 
 export function RapidLocation({ current, adjacent, products, categories, compartments }: {
-  current: TowerCompartment; adjacent: Adjacent; products: ProductOption[];
-  categories: Category[]; compartments: CompartmentOption[];
+  current: RapidLocationContent; adjacent: RapidAdjacent; products: ProductOption[];
+  categories: Category[]; compartments: PhysicalLocationOption[];
 }) {
   const router = useRouter();
   const busyRef = useRef(false);
@@ -31,11 +29,10 @@ export function RapidLocation({ current, adjacent, products, categories, compart
   const [notice, setNotice] = useState("");
   const [adjust, setAdjust] = useState<{ id: string; stock: number } | null>(null);
   useEffect(() => {
-    try { localStorage.setItem(LAST_RAPID_LOCATION, current.codigo); } catch { /* Preferencia local opcional. */ }
-  }, [current.codigo]);
+    try { rememberRapidLocation(localStorage, { id: current.id, tipo: current.tipo, codigo: current.codigo }); } catch { /* Preferencia local opcional. */ }
+  }, [current.id, current.tipo, current.codigo]);
 
-  const filtered = products.filter((item) => `${item.nombre} ${item.categoria}`
-    .toLocaleLowerCase("es").includes(query.trim().toLocaleLowerCase("es"))).slice(0, 50);
+  const filtered = products.filter((item) => matchesCatalogQuery(item.nombre, item.categoria, query)).slice(0, 50);
 
   function choose(product: ProductOption) {
     setSelected(product); setQuantity(""); setError(""); setMode("quantity");
@@ -64,11 +61,11 @@ export function RapidLocation({ current, adjacent, products, categories, compart
   return <div className="rapid-location-page">
     <Link className="back-link" href="/carga"><ArrowLeft size={18} aria-hidden="true" /> Elegir otra ubicación</Link>
     <header className="rapid-location-header">
-      <p className="eyebrow">CARGA RÁPIDA · TORRE C{adjacent.current?.torre_id} · PISO {current.piso}</p>
-      <h1>{current.codigo}</h1>
-      <p>Torre C{adjacent.current?.torre_id} · Piso {current.piso} · Compartimiento {current.posicion}</p>
+      <p className="eyebrow">CARGA RÁPIDA · {current.tipo === "caja" ? `ESTANTE ${current.estante_id}` : `TORRE C${current.torre_id} · PISO ${current.piso}`}</p>
+      <h1 style={{ overflowWrap: "anywhere" }}>{current.codigo}</h1>
+      <p>{physicalLocationContext(current)}</p>
       <span className={current.ocupado ? "rapid-status occupied" : "rapid-status available"}>{current.ocupado ? "Ocupado" : "Disponible"}</span>
-      <Link className="rapid-tower-link" href={`/torres/C${adjacent.current?.torre_id}?compartimiento=${current.codigo}`}><MapPin size={17} aria-hidden="true" /> Ver en torre</Link>
+      <Link className="rapid-tower-link" href={searchLocationHref(current)}><MapPin size={17} aria-hidden="true" /> {current.tipo === "caja" ? "Ver en estante" : "Ver en torre"}</Link>
     </header>
 
     {notice && <p className="catalog-message success" role="status"><Check size={18} aria-hidden="true" /> {notice}</p>}
@@ -109,8 +106,8 @@ export function RapidLocation({ current, adjacent, products, categories, compart
     </section>}
 
     <nav className="rapid-neighbors" aria-label="Recorrido físico">
-      {previous && <Link href={`/carga/${previous.codigo}`} className="catalog-button"><ArrowLeft size={18} aria-hidden="true" /> Anterior · {previous.codigo}</Link>}
-      {next && <Link href={`/carga/${next.codigo}`} className="catalog-button">{next.torre_id === adjacent.current?.torre_id ? `Siguiente · ${next.codigo}` : `Pasar a Torre C${next.torre_id} · ${next.codigo}`} <ArrowRight size={18} aria-hidden="true" /></Link>}
+      {previous && <Link href={rapidLocationHref(previous)} className="catalog-button" style={{ overflowWrap: "anywhere" }}><ArrowLeft size={18} aria-hidden="true" /> Anterior · {previous.codigo}</Link>}
+      {next && <Link href={rapidLocationHref(next)} className="catalog-button" style={{ overflowWrap: "anywhere" }}>{next.tipo === "caja" ? `${current.tipo === "caja" && next.estante_id !== current.estante_id ? `Pasar a Estante ${next.estante_id}` : "Siguiente"} · ${next.codigo}` : current.tipo === "compartimiento" && next.torre_id === current.torre_id ? `Siguiente · ${next.codigo}` : `Pasar a Torre C${next.torre_id} · ${next.codigo}`} <ArrowRight size={18} aria-hidden="true" /></Link>}
     </nav>
     {adjust && <StockOperationDialog operation={{ tipo: "ajuste", productoId: adjust.id, origenId: current.id, currentStock: adjust.stock }}
       products={products} locations={compartments} onClose={() => setAdjust(null)} onSuccess={(message) => { setNotice(message); router.refresh(); }} />}

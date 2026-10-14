@@ -158,12 +158,14 @@ test("acción real: autorización, IDs inválidos y errores no producen éxito/r
   assert.equal((await submitStockOperation({ tipo: "ajuste", productoId: product, origenId: 73, cantidadFisica: 1, cantidadEsperada: 1 })).noChange, true);
 });
 
-test("invalidación no convierte una caja renombrada en ruta de torre/carga rápida", async () => {
+test("invalidación de caja renombrada usa carga por ID y conserva las torres", async () => {
   const { state, submitStockOperation } = fixture();
   state.locations[72].codigo = "MOTORES_1";
   assert.equal((await submitStockOperation({ tipo: "entrada", productoId: product, destinoId: 73, cantidad: 1 })).ok, true);
-  assert.equal(state.paths.some(path => /\/torres\/|\/carga\//.test(path)), false);
-  assert.equal(plain(state.queries[0]).columns, "tipo,torre_id,estante_id,codigo");
+  assert.equal(state.paths.some(path => /\/torres\//.test(path)), false);
+  assert.equal(state.paths.includes('/carga/ubicacion/73'),true);
+  assert.equal(state.paths.includes('/carga/MOTORES_1'),false);
+  assert.equal(plain(state.queries[0]).columns, "id,tipo,torre_id,estante_id,codigo");
 });
 
 test("movimiento confirmado y consulta posterior fallida: éxito, invalidación conservadora y ninguna repetición", async t => {
@@ -186,6 +188,7 @@ test("movimiento confirmado y consulta posterior fallida: éxito, invalidación 
         { path: '/torres/[codigo]', type: 'page' },
         { path: '/estantes/[id]', type: 'page' },
         { path: '/carga/[codigo]', type: 'page' },
+        { path: '/carga/ubicacion/[id]', type: 'page' },
       ]);
       assert.ok(state.paths.includes('/estantes'));
       assert.ok(state.paths.includes(`/productos/${product}`));
