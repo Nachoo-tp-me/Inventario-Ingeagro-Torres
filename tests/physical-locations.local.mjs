@@ -180,6 +180,9 @@ test("Bloques 1/2/4: migraciones, stock, códigos, RLS y concurrencia en Postgre
       await t.test(`${database}: historial común, instantáneas, renombrados y RLS`, async () => {
         t.diagnostic(summary(await sqlFile(database, "tests/history.sql")));
       });
+      await t.test(`${database}: exportaciones de ubicaciones, joins y RLS`, async () => {
+        t.diagnostic(summary(await sqlFile(database, "tests/exports.sql")));
+      });
     }
 
     const database = "locations_a";

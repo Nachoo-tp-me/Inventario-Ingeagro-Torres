@@ -13,6 +13,7 @@ const bundle = await build({
     export * from './app/(workspace)/stock-actions'; export * from './app/(workspace)/box-code-actions';
     export * from './lib/rapid-data'; export * from './app/(workspace)/rapid-actions';
     export * from './lib/stock-data'; export {default as historyPage} from './app/(workspace)/historial/page';
+    export * from './app/(workspace)/export-actions';
     export {default as rapidStartPage} from './app/(workspace)/carga/page';
     export {default as rapidTowerPage} from './app/(workspace)/carga/[codigo]/page';
     export {default as rapidBoxPage} from './app/(workspace)/carga/ubicacion/[id]/page';
@@ -96,7 +97,8 @@ export function createShelfFixture() {
         async insert(input) { return insert(input); },
         then(resolve, reject) {
           state.queries.push(structuredClone(query));
-          if (state.failTable === table) return Promise.resolve({ data: null, error: new Error(`Fallo simulado ${table}`) }).then(resolve, reject);
+          if (state.nullTable === table) return Promise.resolve({ data: null, error: null }).then(resolve, reject);
+          if (state.failTable === table && query.start >= (state.failAfter ?? 0)) return Promise.resolve({ data: null, error: new Error(`Fallo simulado ${table}`) }).then(resolve, reject);
           let rows = table === 'ubicacion_codigos' ? [...state.codeOwners].map(([codigo,compartimiento_id])=>({codigo,compartimiento_id})) : [...state.tables[table]];
           for (const [column, operator, value] of query.filters) rows = rows.filter(row => operator === 'in' ? value.includes(row[column]) : operator === 'eq' ? row[column] === value : row[column] > value);
           rows.sort((a, b) => {
@@ -107,7 +109,7 @@ export function createShelfFixture() {
             return 0;
           });
           const count = rows.length;
-          rows = rows.slice(query.start, query.end + 1);
+          rows = rows.slice(query.start, Math.min(query.end + 1, query.start + (state.maxRows ?? Infinity)));
           if (table === 'productos' && query.columns.includes('categorias')) rows = rows.map(row => ({ ...row, categorias: { nombre: state.tables.categorias.find(category => category.id === row.categoria_id)?.nombre } }));
           if (table === 'inventario' && query.columns.includes('productos(')) rows=rows.map(row=>{
             const product=state.tables.productos.find(product=>product.id===row.producto_id);

@@ -9,7 +9,7 @@ type Format = "csv" | "xlsx" | "png";
 const options = [
   { format: "csv", title: "CSV", description: "Inventario por producto y ubicación, listo para abrir en Excel.", icon: FileText },
   { format: "xlsx", title: "Excel", description: "Libro con hojas Inventario y Resumen.", icon: FileSpreadsheet },
-  { format: "png", title: "Mapa PNG", description: "Estado físico de todas las torres para compartir o imprimir.", icon: ImageIcon },
+  { format: "png", title: "Mapa PNG", description: "Estado físico de torres y estantes para compartir o imprimir.", icon: ImageIcon },
 ] as const;
 
 export function ExportPanel() {
@@ -53,5 +53,6 @@ export function ExportPanel() {
     {error && <p className="catalog-message error" role="alert">{error}</p>}
     {success && <p className="catalog-message success" role="status">{success}</p>}
     <p className="export-note">Los archivos se descargan directamente en este dispositivo. Los productos sin stock aparecen con cantidad 0 y ubicación vacía.</p>
+    <p className="export-note">CSV y Excel V2 conservan las ocho columnas originales y añaden Tipo de ubicación, Estante y Posición de caja. Las cajas usan su código vigente y dejan vacías las columnas de torre.</p>
   </>;
 }
