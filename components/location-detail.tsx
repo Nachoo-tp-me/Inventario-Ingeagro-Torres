@@ -2,9 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Boxes, Check, MapPin, Package, Plus, X } from "lucide-react";
+import { Boxes, Check, MapPin, Package, Pencil, Plus, X } from "lucide-react";
 import type { LocationContent } from "@/lib/location-content";
-import type { PhysicalLocationOption, ProductOption } from "@/lib/stock-model";
+import type { BoxLocationOption, PhysicalLocationOption, ProductOption } from "@/lib/stock-model";
+import { BoxCodeDialog } from "@/components/box-code-dialog";
 import { StockActionMenu, StockOperationDialog, type StockOperationStart } from "@/components/stock-operation";
 
 export function LocationDetail({
@@ -12,6 +13,7 @@ export function LocationDetail({
   context,
   kind,
   quickLoadHref,
+  boxLocation,
   compartments,
   products,
   onClose,
@@ -20,6 +22,7 @@ export function LocationDetail({
   context: React.ReactNode;
   kind: "caja" | "compartimiento";
   quickLoadHref?: string;
+  boxLocation?: BoxLocationOption;
   compartments: PhysicalLocationOption[];
   products: ProductOption[];
   onClose: () => void;
@@ -27,10 +30,12 @@ export function LocationDetail({
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [operation, setOperation] = useState<StockOperationStart | null>(null);
   const [notice, setNotice] = useState("");
+  const [editingCode, setEditingCode] = useState(false);
   const locationId = compartment?.id;
 
   function closeSheet() {
     setOperation(null);
+    setEditingCode(false);
     setNotice("");
     onClose();
   }
@@ -90,6 +95,7 @@ export function LocationDetail({
             {context}
           </div>
           {quickLoadHref && <Link className="catalog-button rapid-sheet-link" href={quickLoadHref}><Plus size={17} aria-hidden="true" /> Cargar aquí</Link>}
+          {kind === "caja" && boxLocation?.id === compartment.id && <button type="button" className="catalog-button rapid-sheet-link" onClick={() => { setNotice(""); setEditingCode(true); }}><Pencil size={17} aria-hidden="true" /> Editar código</button>}
 
           <div
             className={`sheet-status ${compartment.ocupado ? "occupied" : "available"}`}
@@ -183,6 +189,7 @@ export function LocationDetail({
               onSuccess={setNotice}
             />
           )}
+          {editingCode && kind === "caja" && boxLocation?.id === compartment.id && <BoxCodeDialog box={boxLocation} onClose={() => setEditingCode(false)} onSuccess={setNotice} />}
         </div>
       )}
     </dialog>

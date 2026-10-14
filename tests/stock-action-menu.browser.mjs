@@ -46,9 +46,9 @@ test("B1/B2: menús y formularios reales con datos ficticios", async (t) => {
     stdin: { contents: fixture, resolveDir: root, loader: "tsx" },
     bundle: true, write: false, jsx: "automatic", define: { "process.env.NODE_ENV": '"development"' },
     plugins: [{ name: "isolate-backend", setup(build) {
-      build.onResolve({ filter: /^(next\/navigation|next\/link|@\/app\/\(workspace\)\/stock-actions)$/ }, args => ({ path: args.path, namespace: "stub" }));
+      build.onResolve({ filter: /^(next\/navigation|next\/link|@\/app\/\(workspace\)\/(stock-actions|box-code-actions))$/ }, args => ({ path: args.path, namespace: "stub" }));
       build.onLoad({ filter: /.*/, namespace: "stub" }, args => ({
-        contents: args.path === "next/link"
+        contents: args.path.endsWith("/box-code-actions") ? 'export async function renameBoxCode() { throw new Error("Renames disabled in tower regression"); }' : args.path === "next/link"
           ? 'import {createElement} from "react"; export default function Link(props) { return createElement("a", props); }'
           : args.path === "next/navigation"
             ? 'export function useRouter() { return { refresh() { throw new Error("Unexpected refresh"); } }; }'

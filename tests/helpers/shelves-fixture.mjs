@@ -10,7 +10,7 @@ export const requireTools = createRequire(path.join(process.env.SHELVES_TEST_TOO
 const { build } = requireTools("esbuild");
 const bundle = await build({
   stdin: { resolveDir: root, contents: `export * from './lib/shelf-data'; export * from './lib/inventory';
-    export * from './app/(workspace)/stock-actions';
+    export * from './app/(workspace)/stock-actions'; export * from './app/(workspace)/box-code-actions';
     export {default as shelfPage} from './app/(workspace)/estantes/[id]/page';
     export {default as shelvesPage} from './app/(workspace)/estantes/page';` },
   bundle: true, write: false, platform: "node", format: "iife", globalName: "shelves", jsx: "automatic",
@@ -22,7 +22,7 @@ const bundle = await build({
         state.authorizations++;if(state.denied)throw new Error('No autorizado');return state.client;}`
       : args.path.endsWith('/product-catalog') ? `export async function getSignedProductImages(paths){globalThis.__fixture.images.push(paths);
         return new Map(paths.filter(Boolean).map(path=>[path,'https://images.test/'+path]));}`
-      : args.path === 'next/cache' ? 'export function revalidatePath(path){globalThis.__fixture.paths.push(path)}'
+      : args.path === 'next/cache' ? 'export function revalidatePath(path){globalThis.__fixture.paths.push(path);if(globalThis.__fixture.failInvalidation)throw new Error("Cache unavailable")}'
       : args.path === 'next/navigation' ? "export function notFound(){throw new Error('NOT_FOUND')}"
       : args.path.endsWith('/shelf-view') ? 'export function ShelfView(){return null}' : 'export function ShelfOverview(){return null}' }));
   } }],
@@ -55,6 +55,8 @@ export function createShelfFixture() {
       ],
     },
   };
+  state.codeOwners = new Map(state.tables.compartimientos.map(row => [row.codigo, row.id]));
+  state.codeHistory = [];
   const quantity = (product, location) => state.tables.inventario.find(row => row.producto_id === product && row.compartimiento_id === location)?.cantidad ?? 0;
   const update = (product, location, value) => {
     state.tables.inventario = state.tables.inventario.filter(row => row.producto_id !== product || row.compartimiento_id !== location);
@@ -102,6 +104,25 @@ export function createShelfFixture() {
     },
     async rpc(name, input) {
       state.rpcs.push({ name, input: structuredClone(input) });
+      if (name === 'renombrar_codigo_caja') {
+        if (state.renameDelay) await new Promise(resolve => setTimeout(resolve, state.renameDelay));
+        if (state.renameThrow) throw new Error('Synthetic transport failure');
+        if (state.renameError) return { data: null, error: { code: state.renameError, message: 'Sensitive simulated database details' } };
+        const box = state.tables.compartimientos.find(row => row.id === input.p_ubicacion_id);
+        if (!box) return { data: null, error: { code: '23503' } };
+        if (box.tipo !== 'caja') return { data: null, error: { code: '22023' } };
+        if (box.codigo !== input.p_codigo_esperado) return { data: null, error: { code: '40001' } };
+        const owner = state.codeOwners.get(input.p_codigo_nuevo);
+        if (owner !== undefined && owner !== box.id) return { data: null, error: { code: '23505' } };
+        const unchanged = box.codigo === input.p_codigo_nuevo;
+        if (!unchanged) {
+          state.codeHistory.push({ id: box.id, before: box.codigo, after: input.p_codigo_nuevo });
+          state.codeOwners.set(input.p_codigo_nuevo, box.id);
+          box.codigo = input.p_codigo_nuevo;
+        }
+        return { data: Object.hasOwn(state, 'renameResponse') ? state.renameResponse : [{ ubicacion_id: box.id, estante_id: box.estante_id, codigo: box.codigo, sin_cambios: unchanged }], error: null };
+      }
+      if (name !== 'registrar_ajuste_fisico') throw new Error(`Unsupported synthetic RPC: ${name}`);
       const current = quantity(input.p_producto_id, input.p_compartimiento_id);
       if (current !== input.p_cantidad_esperada) return { data: null, error: { code: '40001' } };
       if (current === input.p_cantidad_fisica) return { data: null, error: null };

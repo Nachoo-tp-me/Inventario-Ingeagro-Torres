@@ -42,7 +42,7 @@ alter default privileges in schema public grant all on tables to anon,authentica
 alter default privileges in schema public grant all on sequences to anon,authenticated;
 `;
 
-test("Bloques 1/2: migraciones, stock, RLS y concurrencia en PostgreSQL desechable", async t => {
+test("Bloques 1/2/4: migraciones, stock, códigos, RLS y concurrencia en PostgreSQL desechable", async t => {
   assert.ok(process.env.PG_LOCAL_BIN, "Set PG_LOCAL_BIN to portable/local PostgreSQL binaries. No remote fallback.");
   for (const name of ["initdb", "pg_ctl", "postgres", "psql"]) await access(executable(name));
   const directory = await mkdtemp(path.join(tmpdir(), "ingeagro-locations-sql-"));
@@ -112,9 +112,10 @@ test("Bloques 1/2: migraciones, stock, RLS y concurrencia en PostgreSQL desechab
     t.diagnostic(`ISOLATED: 127.0.0.1:${port}; cluster=${marker}; artifacts=${directory}`);
     sql("postgres", bootstrap);
     const migrations = (await readdir(path.join(root, "supabase/migrations"))).filter(name => name.endsWith(".sql")).sort();
-    const expansion = migrations.filter(name => name.startsWith("20261014"));
-    assert.equal(expansion.length, 2, "Expected exactly two Block 1 migrations.");
-    const previous = migrations.filter(name => !expansion.includes(name));
+    const expansion = ["20261014000000_physical_locations_and_code_registry.sql", "20261014010000_movement_location_code_snapshots.sql"];
+    const renaming = "20261014020000_authorized_box_code_rename.sql";
+    for (const migration of [...expansion, renaming]) assert.ok(migrations.includes(migration));
+    const previous = migrations.filter(name => !expansion.includes(name) && name !== renaming);
 
     // Dos bases nuevas independientes prueban reproducibilidad, no reejecución
     // artificial de una migración ya aplicada.
@@ -146,6 +147,16 @@ test("Bloques 1/2: migraciones, stock, RLS y concurrencia en PostgreSQL desechab
           await sqlFile(database, "supabase/migrations/" + migration);
         }
         if (database === "locations_a") t.diagnostic("PASS rollback real de ambas migraciones ante fallo final forzado");
+        if (database === "locations_a") {
+          const source = await readFile(path.join(root, "supabase/migrations", renaming), "utf8");
+          const failed = spawnSync(executable("psql"), args(database), { env, encoding: "utf8", windowsHide: true,
+            input: source.replace(/\ncommit;\s*$/, "\nselect 1/0;\ncommit;\n"), timeout: 90_000 });
+          assert.equal(failed.status, 3, failed.stderr);
+          assert.match(failed.stderr, /22012/);
+          assert.equal(sql(database, "select to_regprocedure('public.renombrar_codigo_caja(bigint,text,text)') is null;"), "t");
+          t.diagnostic("PASS rollback de función y permisos del Bloque 4 ante fallo de migración");
+        }
+        await sqlFile(database, "supabase/migrations/" + renaming);
         t.diagnostic(sql(database, "select version();"));
       });
       await t.test(`${database}: escenario 96, restricciones y seguridad`, async () => {
@@ -159,6 +170,9 @@ test("Bloques 1/2: migraciones, stock, RLS y concurrencia en PostgreSQL desechab
       });
       await t.test(`${database}: mapa confirmado A/B y posiciones 2x2`, async () => {
         t.diagnostic(summary(await sqlFile(database, "tests/physical-locations.map.sql")));
+      });
+      await t.test(`${database}: RPC de renombrado, mapa, auditoría, permisos y rollback`, async () => {
+        t.diagnostic(summary(await sqlFile(database, "tests/box-code-rename.sql")));
       });
     }
 
@@ -227,6 +241,30 @@ test("Bloques 1/2: migraciones, stock, RLS y concurrencia en PostgreSQL desechab
       assert.equal(sql(database, `select count(*) from public.inventario where producto_id='${product(305)}' and compartimiento_id=${box("C111")};`), "0");
       assert.equal(sql(database, `select sum(cantidad) from public.inventario where producto_id='${product(305)}';`), "5");
       assert.equal(sql(database, `select count(*) from public.movimientos where producto_id='${product(305)}' and tipo='traslado';`), "1");
+    });
+    await t.test("RPC concurrente: misma caja, un éxito y lectura obsoleta sin auditoría parcial", async () => {
+      const id = sql(database, "select id from public.compartimientos where codigo='TEST_E3_P1';");
+      const rename = code => `${authorized} select * from public.renombrar_codigo_caja(${id},'TEST_E3_P1','${code}')`;
+      const result = await overlap(database, rename("RPC_WINNER"), rename("RPC_LOSER"), 74007, 3);
+      assert.match(result.stderr, /40001/);
+      assert.equal(sql(database, "select count(*) from public.cambios_codigo_ubicacion where codigo_nuevo='RPC_WINNER';"), "1");
+      assert.equal(sql(database, "select count(*) from public.ubicacion_codigos where codigo='RPC_LOSER';"), "0");
+    });
+    await t.test("RPC concurrente con movimiento: renombrar primero captura etiqueta nueva", async () => {
+      addProduct(306);
+      const id = sql(database, "select id from public.compartimientos where codigo='TEST_E3_P2';");
+      await overlap(database, `${authorized} select * from public.renombrar_codigo_caja(${id},'TEST_E3_P2','RPC_BEFORE_MOVE')`,
+        `${authorized} insert into public.movimientos(producto_id,tipo,cantidad,destino_compartimiento_id) values('${product(306)}','entrada',3,${id})`, 74008);
+      assert.equal(sql(database, `select codigo_destino from public.movimientos where producto_id='${product(306)}';`), "RPC_BEFORE_MOVE");
+      assert.equal(sql(database, `select cantidad from public.inventario where producto_id='${product(306)}';`), "3");
+    });
+    await t.test("RPC concurrente con movimiento: movimiento primero conserva etiqueta anterior", async () => {
+      addProduct(307);
+      const id = sql(database, "select id from public.compartimientos where codigo='TEST_E3_P3';");
+      await overlap(database, `${authorized} insert into public.movimientos(producto_id,tipo,cantidad,destino_compartimiento_id) values('${product(307)}','entrada',4,${id})`,
+        `${authorized} select * from public.renombrar_codigo_caja(${id},'TEST_E3_P3','RPC_AFTER_MOVE')`, 74009);
+      assert.equal(sql(database, `select codigo_destino from public.movimientos where producto_id='${product(307)}';`), "TEST_E3_P3");
+      assert.equal(sql(database, `select cantidad from public.inventario where producto_id='${product(307)}';`), "4");
     });
     await t.test("conservación final de filas anteriores y consistencia de códigos", () => {
       assert.equal(sql(database, `select count(*) from test_support.movimientos_antes b join public.movimientos m using(id)

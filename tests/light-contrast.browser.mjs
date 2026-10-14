@@ -135,9 +135,10 @@ test("B4: contraste computado, fondos efectivos y comparación visual de ambos t
   const globals = await postcss([tailwind({base:root})]).process(await readStyle(cssFiles[0]),{from:path.join(root,cssFiles[0])});
   const css = [globals.css,...await Promise.all(cssFiles.slice(1).map(readStyle))].join("\n");
   const bundle = await build({stdin:{contents:fixture,resolveDir:root,loader:"tsx"},bundle:true,write:false,jsx:"automatic",define:{"process.env.NODE_ENV":'"development"'},plugins:[{name:"offline-only",setup(build){
-    build.onResolve({filter:/^(next\/link|next\/navigation|@\/lib\/supabase\/client|@\/app\/\(workspace\)\/(stock-actions|search-actions))$/},args=>({path:args.path,namespace:"stub"}));
+    build.onResolve({filter:/^(next\/link|next\/navigation|@\/lib\/supabase\/client|@\/app\/\(workspace\)\/(stock-actions|search-actions|box-code-actions))$/},args=>({path:args.path,namespace:"stub"}));
     build.onLoad({filter:/.*/,namespace:"stub"},args=>({resolveDir:root,contents:args.path==="next/link"?'import {createElement} from "react";export default function Link(props){return createElement("a",props);}'
       :args.path==="next/navigation"?'export function usePathname(){return location.pathname;}export function useRouter(){return {refresh(){throw new Error("Unexpected refresh");},push(url){location.href=url;},replace(url){location.href=url;}};}'
+      :args.path.includes("box-code-actions")?'export async function renameBoxCode(){throw new Error("Code editing disabled in contrast regression");}'
       :args.path.includes("search-actions")?'export async function searchInventory(){return {products:[],location:null,locationAttempt:false};}'
       :'export function createSupabaseClient(){throw new Error("Production access disabled");}export async function submitStockOperation(){throw new Error("Stock submission disabled");}' }));
   }}]});

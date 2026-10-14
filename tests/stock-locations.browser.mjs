@@ -61,8 +61,8 @@ test("stock común: formularios reales y asociaciones de cajas/torres, ambos tem
     ` },
     bundle: true, write: false, jsx: "automatic", define: { "process.env.NODE_ENV": '"development"' },
     plugins: [{ name: "no-real-services", setup(build) {
-      build.onResolve({ filter: /^(next\/navigation|next\/link|@\/app\/\(workspace\)\/stock-actions)$/ }, args => ({ path: args.path, namespace: "fake" }));
-      build.onLoad({ filter: /.*/, namespace: "fake" }, args => ({ contents: args.path === 'next/navigation'
+      build.onResolve({ filter: /^(next\/navigation|next\/link|@\/app\/\(workspace\)\/(stock-actions|box-code-actions))$/ }, args => ({ path: args.path, namespace: "fake" }));
+      build.onLoad({ filter: /.*/, namespace: "fake" }, args => ({ contents: args.path.endsWith('/box-code-actions') ? 'export async function renameBoxCode(){throw new Error("Renames disabled in stock regression")}' : args.path === 'next/navigation'
         ? 'export function useRouter(){return {refresh(){window.__refreshes++}}}'
         : args.path === 'next/link'
           ? 'import {createElement} from "react"; export default function Link(props){return createElement("a",props)}'

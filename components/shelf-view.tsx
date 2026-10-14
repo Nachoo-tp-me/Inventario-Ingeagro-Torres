@@ -37,6 +37,6 @@ export function ShelfView({ shelf, selectedId, locations, products }: {
     <PageHeading eyebrow={`ESTANTES / GRUPO ${shelf.grupo}`} title={shelf.nombre} description="Vista frontal · posiciones físicas permanentes" />
     <div ref={gridRef} className="shelf-detail-grid"><ShelfGrid shelf={shelf} /></div>
     <LocationDetail key={box?.id ?? "closed"} compartment={box} kind="caja" context={box && <span>{physicalLocationContext(box)}</span>}
-      compartments={locations} products={products} onClose={closeBox} />
+      boxLocation={box ?? undefined} compartments={locations} products={products} onClose={closeBox} />
   </div>;
 }

@@ -58,7 +58,7 @@ test('Estantes: seis mapas físicos, navegación y stock compartido en ambos tem
     stdin: { resolveDir: root, loader: 'tsx', contents: fixture },
     bundle: true, write: false, jsx: 'automatic', define: { 'process.env.NODE_ENV': '"development"' },
     plugins: [{ name: 'offline-browser-services', setup(build) {
-      build.onResolve({ filter: /^(next\/navigation|next\/link|@\/lib\/supabase\/client|@\/app\/\(workspace\)\/stock-actions)$/ }, args => ({ path: args.path, namespace: 'fake' }));
+      build.onResolve({ filter: /^(next\/navigation|next\/link|@\/lib\/supabase\/client|@\/app\/\(workspace\)\/(stock-actions|box-code-actions))$/ }, args => ({ path: args.path, namespace: 'fake' }));
       build.onLoad({ filter: /.*/, namespace: 'fake' }, args => ({ resolveDir: root, contents:
         args.path === 'next/link' ? `import {createElement} from 'react'; export default function Link({href,children,...props}){
           return createElement('a',{...props,href,onClick:event=>{event.preventDefault();history.pushState({},'',href);dispatchEvent(new PopStateEvent('popstate'))}},children)}`
@@ -67,6 +67,7 @@ test('Estantes: seis mapas físicos, navegación y stock compartido en ambos tem
           export function usePathname(){return useSyncExternalStore(subscribe,()=>location.pathname)};
           export function useRouter(){return {replace(path){setTimeout(()=>{history.replaceState({},'',path);dispatchEvent(new PopStateEvent('popstate'))},window.__navigationDelay??0)},refresh(){window.__refresh?.()}}}`
         : args.path.endsWith('/supabase/client') ? "export function createSupabaseClient(){throw new Error('Real authentication disabled')}"
+        : args.path.endsWith('/box-code-actions') ? "export async function renameBoxCode(input){const response=await fetch('/rename',{method:'POST',body:JSON.stringify(input)});return response.json()}"
         : "export async function submitStockOperation(input){const response=await fetch('/action',{method:'POST',body:JSON.stringify(input)});return response.json()}" }));
     } }],
   });
@@ -87,9 +88,10 @@ test('Estantes: seis mapas físicos, navegación y stock compartido en ambos tem
           data={kind:'detail',...element.props};
         }
         response.setHeader('Content-Type','application/json');response.end(JSON.stringify({path:target.pathname,...data}));
-      } else if(url.pathname==='/action') {
+      } else if(url.pathname==='/action'||url.pathname==='/rename') {
         const chunks=[];for await(const chunk of request)chunks.push(chunk);
-        const result=await activeFixture.submitStockOperation(JSON.parse(Buffer.concat(chunks).toString()));
+        const input=JSON.parse(Buffer.concat(chunks).toString());
+        const result=await (url.pathname==='/rename'?activeFixture.renameBoxCode(input):activeFixture.submitStockOperation(input));
         response.setHeader('Content-Type','application/json');response.end(JSON.stringify(result));
       } else if(url.pathname==='/fixture.js') {
         response.setHeader('Content-Type','application/javascript');response.end(bundle.outputFiles[0].text);
@@ -158,6 +160,29 @@ test('Estantes: seis mapas físicos, navegación y stock compartido en ambos tem
       assert.equal(await detail.locator('a[href^="/carga/"]').count(),0);
       assert.equal(await page.evaluate(()=>document.body.style.overflow),'hidden');
       await page.screenshot({path:path.join(directory,`caja-${width}-${theme}.png`),fullPage:true});
+      // Renombrado real de UI/acción, con persistencia simulada y stock intacto.
+      const editButton=detail.getByRole('button',{name:'Editar código',exact:true});
+      await editButton.click();
+      const codeDialog=page.locator('.stock-dialog[open]');await codeDialog.waitFor();
+      await page.keyboard.press('Escape');await codeDialog.waitFor({state:'hidden'});
+      assert.equal(await detail.count(),1);
+      assert.equal(await editButton.evaluate(button=>document.activeElement===button),true);
+      await editButton.click();await codeDialog.waitFor();
+      assert.equal(await codeDialog.locator('#box-new-code').evaluate(input=>document.activeElement===input),true);
+      await codeDialog.locator('#box-new-code').fill(' motores_1 ');
+      await codeDialog.getByRole('button',{name:'Continuar',exact:true}).click();
+      assert.match(await codeDialog.innerText(),/MOTORES_1/);
+      await page.screenshot({path:path.join(directory,`editar-codigo-${width}-${theme}.png`),fullPage:true});
+      await codeDialog.getByRole('button',{name:'Guardar código',exact:true}).click();await codeDialog.waitFor({state:'hidden'});
+      await detail.getByRole('heading',{name:'MOTORES_1',exact:true}).waitFor();
+      assert.match(await detail.getByRole('status').innerText(),/guardado correctamente/);
+      assert.equal(new URL(page.url()).searchParams.get('caja'),'73');
+      assert.equal(activeFixture.state.writes.length,0);
+      assert.equal(activeFixture.state.tables.inventario.find(row=>row.compartimiento_id===73&&row.producto_id===productId).cantidad,7);
+      assert.equal(activeFixture.state.codeHistory.length,1);
+      assert.equal(await page.locator('[data-location-id="73"]').getAttribute('data-position'),'1');
+      assert.equal(await codeDialog.count(),0);
+      assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
       const productRow=()=>detail.locator('.sheet-product').filter({hasText:'Módulo térmico'});
       const stockDialog=page.locator('.stock-dialog[open]');
       async function openOperation(label) {
@@ -213,6 +238,88 @@ test('Estantes: seis mapas físicos, navegación y stock compartido en ambos tem
       results.push({width,theme,status:'PASS',contrasts});await page.close();
     });
   }
+  await t.test('edición: validación, históricos, conflicto y bloqueo de envíos duplicados',async()=>{
+    activeFixture=createShelfFixture();
+    const page=await browser.newPage({viewport:{width:390,height:850},hasTouch:true});
+    await page.route('**/*',route=>route.request().url().startsWith(url)?route.continue():route.abort());
+    await page.goto(url+'/estantes/1?caja=73');
+    const detail=page.locator('.compartment-dialog[open]');await detail.waitFor();
+    const edit=detail.getByRole('button',{name:'Editar código',exact:true});
+    const dialog=page.locator('.stock-dialog[open]');
+    async function start(code){await edit.click();await dialog.locator('#box-new-code').fill(code);await dialog.getByRole('button',{name:'Continuar',exact:true}).click()}
+    await start('c999');await dialog.getByRole('alert').waitFor();
+    assert.equal(activeFixture.state.rpcs.length,0);
+    await dialog.locator('#box-new-code').fill('A2');await dialog.getByRole('button',{name:'Continuar',exact:true}).click();
+    await dialog.getByRole('button',{name:'Guardar código',exact:true}).click();
+    await dialog.getByRole('alert').filter({hasText:'otra ubicación'}).waitFor();
+    assert.equal(activeFixture.state.codeHistory.length,0);
+    await dialog.getByRole('button',{name:'Cancelar',exact:true}).click();
+    // Código idéntico: éxito sin auditoría.
+    await start(' a1 ');await dialog.getByRole('button',{name:'Guardar código',exact:true}).click();await dialog.waitFor({state:'hidden'});
+    assert.equal(activeFixture.state.codeHistory.length,0);
+    assert.match(await detail.getByRole('status').innerText(),/No se registró un cambio/);
+    // Cambio externo después de abrir: conservar expectedCode y mostrar conflicto.
+    await start('NUEVO');
+    activeFixture.state.tables.compartimientos.find(row=>row.id===73).codigo='OTRA_SESION';
+    activeFixture.state.codeOwners.set('OTRA_SESION',73);
+    await dialog.getByRole('button',{name:'Guardar código',exact:true}).click();
+    await dialog.getByRole('alert').filter({hasText:'otra sesión'}).waitFor();
+    await detail.getByRole('heading',{name:'OTRA_SESION',exact:true}).waitFor();
+    assert.equal(await dialog.locator('.stock-fixed-choice strong').innerText(),'A1');
+    assert.equal(activeFixture.state.rpcs.at(-1).input.p_codigo_esperado,'A1');
+    await dialog.getByRole('button',{name:'Cancelar',exact:true}).click();
+    // Dos submits en un mismo turno mientras el RPC está pendiente producen una escritura.
+    activeFixture.state.renameDelay=500;
+    const rpcCount=activeFixture.state.rpcs.length;
+    await start('MOTORES_1');
+    await dialog.locator('form').evaluate(form=>{form.requestSubmit();form.requestSubmit()});
+    await page.waitForFunction(()=>document.querySelector('.stock-dialog[open] button[type="submit"]')?.disabled);
+    await page.keyboard.press('Escape');assert.equal(await dialog.count(),1);
+    await dialog.waitFor({state:'hidden'});
+    await detail.getByRole('heading',{name:'MOTORES_1',exact:true}).waitFor();
+    assert.equal(activeFixture.state.rpcs.length,rpcCount+1);
+    assert.equal(activeFixture.state.codeHistory.length,1);
+    assert.equal(activeFixture.state.writes.length,0);
+    activeFixture.state.renameDelay=0;
+    // Recuperar alias propio preserva ID, posición y cantidades.
+    await start('A1');await dialog.getByRole('button',{name:'Guardar código',exact:true}).click();await dialog.waitFor({state:'hidden'});
+    await detail.getByRole('heading',{name:'A1',exact:true}).waitFor();
+    assert.equal(activeFixture.state.codeOwners.get('MOTORES_1'),73);
+    assert.equal(activeFixture.state.codeHistory.length,2);
+    assert.equal(activeFixture.state.tables.compartimientos.find(row=>row.id===73).posicion,1);
+    assert.equal(activeFixture.state.tables.inventario.filter(row=>row.compartimiento_id===73).reduce((sum,row)=>sum+row.cantidad,0),10);
+    await page.keyboard.press('Escape');await detail.waitFor({state:'hidden'});
+    await page.waitForFunction(()=>document.activeElement?.matches('[data-location-id="73"]'));
+    assert.equal(await page.evaluate(()=>document.body.style.overflow),'');
+    await page.close();
+  });
+  await t.test('respuesta incierta: actualizar sin anunciar éxito ni repetir el renombrado',async()=>{
+    activeFixture=createShelfFixture();
+    activeFixture.state.renameResponse=[];
+    const page=await browser.newPage({viewport:{width:390,height:850}});
+    await page.route('**/*',route=>route.request().url().startsWith(url)?route.continue():route.abort());
+    await page.goto(url+'/estantes/1?caja=73');
+    const detail=page.locator('.compartment-dialog[open]');await detail.waitFor();
+    await detail.getByRole('button',{name:'Editar código',exact:true}).click();
+    const dialog=page.locator('.stock-dialog[open]');
+    await dialog.locator('#box-new-code').fill('MOTORES_1');
+    await dialog.getByRole('button',{name:'Continuar',exact:true}).click();
+    await dialog.getByRole('button',{name:'Guardar código',exact:true}).click();
+    await dialog.getByRole('alert').filter({hasText:'incierto'}).waitFor();
+    // La escritura simulada ocurrió; router.refresh actualiza el detalle, sin onSuccess.
+    await detail.getByRole('heading',{name:'MOTORES_1',exact:true}).waitFor();
+    assert.equal(await detail.getByRole('status').count(),0);
+    assert.equal(await dialog.locator('.stock-fixed-choice strong').innerText(),'A1');
+    assert.equal(activeFixture.state.rpcs.length,1);
+    assert.equal(activeFixture.state.codeHistory.length,1);
+    assert.ok(activeFixture.state.paths.includes('/estantes/[id]'));
+    assert.equal(new URL(page.url()).searchParams.get('caja'),'73');
+    await page.keyboard.press('Escape');await dialog.waitFor({state:'hidden'});
+    await detail.getByRole('button',{name:'Editar código',exact:true}).click();
+    assert.equal(await dialog.locator('#box-new-code').inputValue(),'MOTORES_1');
+    assert.equal(activeFixture.state.rpcs.length,1);
+    await page.close();
+  });
   await t.test('vacío, error recuperable y código cambiado conservan navegación por ID',async()=>{
     activeFixture=createShelfFixture();activeFixture.state.tables.estantes=[];
     const page=await browser.newPage({viewport:{width:390,height:850}});
