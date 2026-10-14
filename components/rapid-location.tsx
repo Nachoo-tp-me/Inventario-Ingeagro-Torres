@@ -113,6 +113,6 @@ export function RapidLocation({ current, adjacent, products, categories, compart
       {next && <Link href={`/carga/${next.codigo}`} className="catalog-button">{next.torre_id === adjacent.current?.torre_id ? `Siguiente · ${next.codigo}` : `Pasar a Torre C${next.torre_id} · ${next.codigo}`} <ArrowRight size={18} aria-hidden="true" /></Link>}
     </nav>
     {adjust && <StockOperationDialog operation={{ tipo: "ajuste", productoId: adjust.id, origenId: current.id, currentStock: adjust.stock }}
-      products={products} compartments={compartments} onClose={() => setAdjust(null)} onSuccess={(message) => { setNotice(message); router.refresh(); }} />}
+      products={products} locations={compartments} onClose={() => setAdjust(null)} onSuccess={(message) => { setNotice(message); router.refresh(); }} />}
   </div>;
 }

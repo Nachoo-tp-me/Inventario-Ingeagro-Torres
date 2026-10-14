@@ -1,16 +1,37 @@
 import { requireAuthorizedUser } from "@/lib/auth";
-import type { CompartmentOption, ProductOption } from "@/lib/stock-model";
+import { toPhysicalLocation, type CompartmentOption, type PhysicalLocationOption, type ProductOption } from "@/lib/stock-model";
+
+const LOCATION_COLUMNS = "id,codigo,tipo,torre_id,piso,estante_id,posicion";
 
 export async function getCompartments(): Promise<CompartmentOption[]> {
   const supabase = await requireAuthorizedUser();
   const { data, error } = await supabase
     .from("compartimientos")
-    .select("id,codigo,torre_id,piso,posicion")
+    .select(LOCATION_COLUMNS)
+    .eq("tipo", "compartimiento")
     .order("torre_id")
     .order("piso")
     .order("posicion");
   if (error) throw error;
-  return data ?? [];
+  return (data ?? []).map((row) => {
+    const location = toPhysicalLocation(row);
+    if (location.tipo !== "compartimiento") throw new Error("Se esperaba un compartimiento de torre.");
+    return location;
+  });
+}
+
+export async function getPhysicalLocations(): Promise<PhysicalLocationOption[]> {
+  const supabase = await requireAuthorizedUser();
+  const { data, error } = await supabase
+    .from("compartimientos")
+    .select(LOCATION_COLUMNS)
+    .order("tipo", { ascending: false })
+    .order("torre_id")
+    .order("estante_id")
+    .order("piso")
+    .order("posicion");
+  if (error) throw error;
+  return (data ?? []).map(toPhysicalLocation);
 }
 
 export async function getProductOptions(): Promise<ProductOption[]> {

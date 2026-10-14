@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Boxes, Check, MapPin, Package, Plus, X } from "lucide-react";
 import type { TowerCompartment } from "@/lib/tower-model";
-import type { CompartmentOption, ProductOption } from "@/lib/stock-model";
+import type { PhysicalLocationOption, ProductOption } from "@/lib/stock-model";
 import { StockActionMenu, StockOperationDialog, type StockOperationStart } from "@/components/stock-operation";
 
 export function CompartmentDetail({
@@ -16,7 +16,7 @@ export function CompartmentDetail({
 }: {
   compartment: TowerCompartment | null;
   towerCode: string;
-  compartments: CompartmentOption[];
+  compartments: PhysicalLocationOption[];
   products: ProductOption[];
   onClose: () => void;
 }) {
@@ -174,7 +174,7 @@ export function CompartmentDetail({
               key={`${operation.tipo}-${operation.productoId ?? "select"}`}
               operation={operation}
               products={products}
-              compartments={compartments}
+              locations={compartments}
               onClose={() => setOperation(null)}
               onSuccess={setNotice}
             />

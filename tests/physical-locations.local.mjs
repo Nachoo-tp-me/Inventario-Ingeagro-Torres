@@ -42,7 +42,7 @@ alter default privileges in schema public grant all on tables to anon,authentica
 alter default privileges in schema public grant all on sequences to anon,authenticated;
 `;
 
-test("Bloque 1: migraciones, integridad, RLS y concurrencia en PostgreSQL desechable", async t => {
+test("Bloques 1/2: migraciones, stock, RLS y concurrencia en PostgreSQL desechable", async t => {
   assert.ok(process.env.PG_LOCAL_BIN, "Set PG_LOCAL_BIN to portable/local PostgreSQL binaries. No remote fallback.");
   for (const name of ["initdb", "pg_ctl", "postgres", "psql"]) await access(executable(name));
   const directory = await mkdtemp(path.join(tmpdir(), "ingeagro-locations-sql-"));
@@ -154,6 +154,9 @@ test("Bloque 1: migraciones, integridad, RLS y concurrencia en PostgreSQL desech
       await t.test(`${database}: regresión SQL de stock existente`, async () => {
         await sqlFile(database, "tests/stock-transactions.sql");
       });
+      await t.test(`${database}: stock común, siete operaciones y rollback`, async () => {
+        t.diagnostic(summary(await sqlFile(database, "tests/stock-locations.sql")));
+      });
       await t.test(`${database}: mapa confirmado A/B y posiciones 2x2`, async () => {
         t.diagnostic(summary(await sqlFile(database, "tests/physical-locations.map.sql")));
       });
@@ -200,6 +203,30 @@ test("Bloque 1: migraciones, integridad, RLS y concurrencia en PostgreSQL desech
       assert.match(result.stderr, /23514/);
       assert.equal(sql(database, `select cantidad from public.inventario where producto_id='${product(303)}';`), "1");
       assert.equal(sql(database, `select count(*) from public.movimientos where producto_id='${product(303)}' and tipo='retiro';`), "1");
+    });
+    await t.test("concurrencia: ajustes de caja, uno confirma y otro rechaza lectura obsoleta", async () => {
+      addProduct(304);
+      sql(database, `${authorized} insert into public.movimientos(producto_id,tipo,cantidad,destino_compartimiento_id)
+        values('${product(304)}','entrada',5,${box("TEST_E2_P1")});`);
+      const adjustment = physical => `${authorized} select public.registrar_ajuste_fisico('${product(304)}',${box("TEST_E2_P1")},${physical},5)`;
+      const result = await overlap(database, adjustment(4), adjustment(7), 74005, 3);
+      assert.match(result.stderr, /40001/);
+      assert.equal(sql(database, `select cantidad from public.inventario where producto_id='${product(304)}';`), "4");
+      assert.equal(sql(database, `select count(*) from public.movimientos where producto_id='${product(304)}' and tipo='ajuste';`), "1");
+    });
+    await t.test("concurrencia: dos traslados comparten origen, sin duplicar cantidades", async () => {
+      addProduct(305);
+      sql(database, `${authorized} insert into public.movimientos(producto_id,tipo,cantidad,destino_compartimiento_id)
+        values('${product(305)}','entrada',5,${box("TEST_E2_P2")});`);
+      const transfer = destination => `${authorized} insert into public.movimientos(producto_id,tipo,cantidad,origen_compartimiento_id,destino_compartimiento_id)
+        values('${product(305)}','traslado',4,${box("TEST_E2_P2")},${destination})`;
+      const result = await overlap(database, transfer(box("TEST_E6_P4")), transfer(box("C111")), 74006, 3);
+      assert.match(result.stderr, /23514/);
+      assert.equal(sql(database, `select cantidad from public.inventario where producto_id='${product(305)}' and compartimiento_id=${box("TEST_E2_P2")};`), "1");
+      assert.equal(sql(database, `select cantidad from public.inventario where producto_id='${product(305)}' and compartimiento_id=${box("TEST_E6_P4")};`), "4");
+      assert.equal(sql(database, `select count(*) from public.inventario where producto_id='${product(305)}' and compartimiento_id=${box("C111")};`), "0");
+      assert.equal(sql(database, `select sum(cantidad) from public.inventario where producto_id='${product(305)}';`), "5");
+      assert.equal(sql(database, `select count(*) from public.movimientos where producto_id='${product(305)}' and tipo='traslado';`), "1");
     });
     await t.test("conservación final de filas anteriores y consistencia de códigos", () => {
       assert.equal(sql(database, `select count(*) from test_support.movimientos_antes b join public.movimientos m using(id)

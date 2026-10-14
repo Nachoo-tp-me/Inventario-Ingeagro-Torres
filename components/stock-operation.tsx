@@ -6,10 +6,12 @@ import { useRouter } from "next/navigation";
 import { ArrowRight, Check, Package, Search, X } from "lucide-react";
 import { submitStockOperation } from "@/app/(workspace)/stock-actions";
 import { StockActionMenu } from "@/components/stock-action-menu";
+import { matchesCatalogQuery } from "@/lib/rapid-model";
 import {
   parseQuantity,
   validateStockOperation,
-  type CompartmentOption,
+  physicalLocationContext,
+  type PhysicalLocationOption,
   type ProductOption,
   type StockOperationInput,
   type StockOperationType,
@@ -37,13 +39,13 @@ export { StockActionMenu };
 export function StockOperationDialog({
   operation,
   products,
-  compartments,
+  locations,
   onClose,
   onSuccess,
 }: {
   operation: StockOperationStart;
   products: ProductOption[];
-  compartments: CompartmentOption[];
+  locations: PhysicalLocationOption[];
   onClose: () => void;
   onSuccess: (message: string) => void;
 }) {
@@ -74,14 +76,14 @@ export function StockOperationDialog({
   }, [isBrowser]);
 
   const selectedProduct = products.find((item) => item.id === productId);
-  const origin = compartments.find((item) => item.id === operation.origenId);
-  const destination = compartments.find((item) => item.id === destinationId);
+  const origin = locations.find((item) => item.id === operation.origenId);
+  const destination = locations.find((item) => item.id === destinationId);
   const visibleProducts = products
-    .filter((item) => `${item.nombre} ${item.categoria}`.toLocaleLowerCase("es").includes(productQuery.toLocaleLowerCase("es")))
+    .filter((item) => matchesCatalogQuery(item.nombre, item.categoria, productQuery))
     .slice(0, 50);
-  const visibleLocations = compartments
+  const visibleLocations = locations
     .filter((item) => item.id !== (operation.tipo === "traslado" ? operation.origenId : -1))
-    .filter((item) => `${item.codigo} Torre C${item.torre_id} Piso ${item.piso}`.toLocaleLowerCase("es").includes(locationQuery.toLocaleLowerCase("es")))
+    .filter((item) => matchesCatalogQuery(item.codigo, physicalLocationContext(item), locationQuery))
     .slice(0, 50);
 
   function buildInput(): StockOperationInput | null {
@@ -103,6 +105,12 @@ export function StockOperationDialog({
     };
     const validationError = validateStockOperation(input);
     if (validationError) { setError(validationError); return null; }
+    if (!selectedProduct ||
+        (operation.tipo !== "entrada" && !origin) ||
+        ((operation.tipo === "entrada" || operation.tipo === "traslado") && !destination)) {
+      setError("El producto o la ubicación no está disponible. Actualiza la página.");
+      return null;
+    }
     if ((operation.tipo === "retiro" || operation.tipo === "traslado") &&
         operation.currentStock !== undefined && value > operation.currentStock) {
       setError("No hay stock suficiente en esta ubicación.");
@@ -212,10 +220,10 @@ export function StockOperationDialog({
                   <div className="stock-search-field"><Search size={18} aria-hidden="true" /><input id="stock-location-search" type="search" placeholder="Ej. C264" value={locationQuery} onChange={(event) => setLocationQuery(event.target.value)} disabled={pending} /></div>
                   {destination && <p className="stock-picked"><Check size={16} aria-hidden="true" /> Seleccionado: {destination.codigo}</p>}
                   <div className="stock-option-list locations" role="group" aria-label="Ubicaciones disponibles">
-                    {visibleLocations.map((item) => <button key={item.id} type="button" className={item.id === destinationId ? "selected" : ""} aria-pressed={item.id === destinationId} onClick={() => setDestinationId(item.id)} disabled={pending}><span><strong>{item.codigo}</strong><small>Torre C{item.torre_id} · Piso {item.piso} · Compartimiento {item.posicion}</small></span></button>)}
+                    {visibleLocations.map((item) => <button key={item.id} type="button" className={item.id === destinationId ? "selected" : ""} aria-pressed={item.id === destinationId} onClick={() => setDestinationId(item.id)} disabled={pending}><span><strong>{item.codigo}</strong><small>{physicalLocationContext(item)}</small></span></button>)}
                     {visibleLocations.length === 0 && <p>No se encontraron ubicaciones.</p>}
                   </div>
-                  {compartments.length > 50 && <small className="stock-picker-hint">Escribe el código para encontrar otras ubicaciones.</small>}
+                  {locations.length > 50 && <small className="stock-picker-hint">Escribe el código para encontrar otras ubicaciones.</small>}
                 </div>
               )
             )}

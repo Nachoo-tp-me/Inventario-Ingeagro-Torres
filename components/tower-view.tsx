@@ -7,11 +7,11 @@ import { CompartmentDetail } from "@/components/compartment-detail";
 import { TowerFloor } from "@/components/tower-floor";
 import { TowerTopView } from "@/components/tower-top-view";
 import type { TowerDetail, TowerCompartment } from "@/lib/tower-model";
-import type { CompartmentOption, ProductOption } from "@/lib/stock-model";
+import type { PhysicalLocationOption, ProductOption } from "@/lib/stock-model";
 
 export function TowerView({ tower, compartments, products, initialCode }: {
   tower: TowerDetail;
-  compartments: CompartmentOption[];
+  compartments: PhysicalLocationOption[];
   products: ProductOption[];
   initialCode?: string;
 }) {

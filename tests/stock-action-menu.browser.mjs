@@ -25,14 +25,14 @@ const products = [
   ...Array.from({length: 6}, (_, index) => ({id: "00000000-0000-0000-0000-" + String(index + 3).padStart(12, "0"), nombre: "Producto " + (index + 3), categoria: "Prueba"})),
 ];
 const locations = Array.from({length: 8}, (_, index) => ({id: index + 1, codigo: "C" + (index + 1), cantidad: 11 + index}));
-const compartments = locations.map(location => ({...location, torre_id: 1, piso: 1, posicion: location.id}));
+const compartments = locations.map(location => ({...location, tipo: "compartimiento", torre_id: 1, piso: Math.ceil(location.id / 4), posicion: (location.id - 1) % 4 + 1}));
 const compartment = {...compartments[2], ocupado: true, productos: products.map((product, index) => ({...product, cantidad: 23 + index, fotoUrl: null}))};
 function Fixture() {
   const [open, setOpen] = useState(false);
   return <>
     <button id="open-compartment" onClick={() => setOpen(true)}>Abrir compartimiento</button>
     <main style={{padding: "100px 16px 500px", maxWidth: 900, margin: "auto"}}>
-      <ProductStockControls product={products[0]} locations={locations} compartments={compartments} />
+      <ProductStockControls product={products[0]} locations={locations} physicalLocations={compartments} />
     </main>
     <nav className="mobile-navigation">{["Inicio", "Productos", "Torres", "Historial", "Más"].map(label => <button key={label} className="nav-link">{label}</button>)}</nav>
     <CompartmentDetail compartment={open ? compartment : null} towerCode="C1" compartments={compartments} products={products} onClose={() => setOpen(false)} />

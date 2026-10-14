@@ -4,16 +4,16 @@ import { useState } from "react";
 import { MapPin, Plus } from "lucide-react";
 import { StockActionMenu, StockOperationDialog, type StockOperationStart } from "@/components/stock-operation";
 import type { ProductLocation } from "@/lib/product-catalog";
-import type { CompartmentOption, ProductOption } from "@/lib/stock-model";
+import type { PhysicalLocationOption, ProductOption } from "@/lib/stock-model";
 
 export function ProductStockControls({
   product,
   locations,
-  compartments,
+  physicalLocations,
 }: {
   product: ProductOption;
   locations: ProductLocation[];
-  compartments: CompartmentOption[];
+  physicalLocations: PhysicalLocationOption[];
 }) {
   const [operation, setOperation] = useState<StockOperationStart | null>(null);
   const [notice, setNotice] = useState("");
@@ -50,7 +50,7 @@ export function ProductStockControls({
           key={`${operation.tipo}-${operation.origenId ?? "new"}`}
           operation={operation}
           products={[product]}
-          compartments={compartments}
+          locations={physicalLocations}
           onClose={() => setOperation(null)}
           onSuccess={setNotice}
         />

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Package, Pencil } from "lucide-react";
 import { getProduct } from "@/lib/product-catalog";
-import { getCompartments } from "@/lib/stock-data";
+import { getPhysicalLocations } from "@/lib/stock-data";
 import { ProductStockControls } from "@/components/product-stock-controls";
 
 export default async function ProductDetailPage({
@@ -13,7 +13,7 @@ export default async function ProductDetailPage({
   searchParams: Promise<{ guardado?: string }>;
 }) {
   const { id } = await params;
-  const [detail, compartments] = await Promise.all([getProduct(id), getCompartments()]);
+  const [detail, compartments] = await Promise.all([getProduct(id), getPhysicalLocations()]);
   if (!detail) notFound();
   const { product, locations } = detail;
   const { guardado } = await searchParams;
@@ -50,7 +50,7 @@ export default async function ProductDetailPage({
       <ProductStockControls
         product={{ id: product.id, nombre: product.nombre, categoria: product.categoria }}
         locations={locations}
-        compartments={compartments}
+        physicalLocations={compartments}
       />
     </div>
   );
