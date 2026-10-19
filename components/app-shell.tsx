@@ -6,6 +6,7 @@ import {
   Boxes,
   ChartNoAxesCombined,
   Clock3,
+  Download,
   Layers3,
   LogOut,
   PackageSearch,
@@ -14,31 +15,36 @@ import {
 import { useState } from "react";
 import { createSupabaseClient } from "@/lib/supabase/client";
 import { ThemeToggle } from "@/components/theme-toggle";
+import {
+  DESKTOP_LINKS,
+  MOBILE_LINKS,
+  isDesktopActive,
+  isMobileActive,
+  sectionLabel,
+} from "@/lib/navigation-model";
 
-const links = [
-  { href: "/", label: "Inicio", icon: ChartNoAxesCombined },
-  { href: "/torres", label: "Torres", icon: Layers3 },
-  { href: "/estantes", label: "Estantes", icon: Boxes },
-  { href: "/productos", label: "Productos", icon: PackageSearch },
-  { href: "/carga", label: "Carga rápida", mobileLabel: "Carga", icon: Zap },
-  { href: "/historial", label: "Historial", icon: Clock3 },
-];
-
-const mobileLinks = links.filter(link => link.href !== "/torres" && link.href !== "/estantes");
-mobileLinks.splice(2, 0, { href: "/ubicaciones", label: "Ubicaciones", icon: Layers3 });
+const ICONS = {
+  "/": ChartNoAxesCombined,
+  "/torres": Layers3,
+  "/estantes": Boxes,
+  "/ubicaciones": Layers3,
+  "/productos": PackageSearch,
+  "/carga": Zap,
+  "/historial": Clock3,
+  "/exportaciones": Download,
+} as const;
 
 function Navigation({ mobile = false }: { mobile?: boolean }) {
   const pathname = usePathname();
+  const isActive = mobile ? isMobileActive : isDesktopActive;
   return (
     <nav
       className={mobile ? "mobile-navigation" : "side-navigation"}
       aria-label="Navegación principal"
     >
-      {(mobile ? mobileLinks : links).map(({ href, label, icon: Icon, ...rest }) => {
-        const active =
-          href === "/" ? pathname === "/" : href === "/ubicaciones"
-            ? ["/ubicaciones", "/torres", "/estantes"].some(path => pathname.startsWith(path))
-            : pathname.startsWith(href);
+      {(mobile ? MOBILE_LINKS : DESKTOP_LINKS).map(({ href, label, mobileLabel }) => {
+        const Icon = ICONS[href as keyof typeof ICONS];
+        const active = isActive(pathname, href);
         return (
           <Link
             key={href}
@@ -47,7 +53,7 @@ function Navigation({ mobile = false }: { mobile?: boolean }) {
             aria-current={active ? "page" : undefined}
           >
             <Icon aria-hidden="true" size={20} strokeWidth={1.9} />
-            <span>{mobile && "mobileLabel" in rest ? rest.mobileLabel : label}</span>
+            <span>{mobile && mobileLabel ? mobileLabel : label}</span>
           </Link>
         );
       })}
@@ -99,9 +105,37 @@ function SignOutButton({ compact = false }: { compact?: boolean }) {
   );
 }
 
+function TopbarContext() {
+  const pathname = usePathname();
+  return (
+    <div className="topbar-label">
+      <span className="topbar-system">Inventario físico</span>
+      <span className="topbar-separator" aria-hidden="true">/</span>
+      <span className="topbar-section">{sectionLabel(pathname)}</span>
+    </div>
+  );
+}
+
+function ExportShortcut() {
+  const pathname = usePathname();
+  const active = isDesktopActive(pathname, "/exportaciones");
+  return (
+    <Link
+      href="/exportaciones"
+      className={active ? "topbar-export active" : "topbar-export"}
+      aria-label="Exportar inventario"
+      aria-current={active ? "page" : undefined}
+      title="Exportar inventario"
+    >
+      <Download aria-hidden="true" size={20} />
+    </Link>
+  );
+}
+
 export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="app-shell">
+      <a href="#contenido" className="skip-link">Saltar al contenido</a>
       <aside className="sidebar">
         <Link
           href="/"
@@ -137,19 +171,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </span>
             <strong>INGEAGRO</strong>
           </Link>
-          <div className="topbar-label">
-            Inventario físico <span className="topbar-separator">/</span>{" "}
-            Gestión de ubicaciones
-          </div>
+          <TopbarContext />
           <div className="topbar-right">
             <span className="session-pill">
               <span /> Sesión activa
             </span>
+            <ExportShortcut />
             <ThemeToggle />
             <SignOutButton compact />
           </div>
         </header>
-        <main className="main-content">{children}</main>
+        <main id="contenido" tabIndex={-1} className="main-content">{children}</main>
       </div>
       <Navigation mobile />
     </div>

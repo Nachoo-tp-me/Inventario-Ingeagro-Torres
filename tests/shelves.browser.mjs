@@ -142,7 +142,7 @@ test('Estantes: seis mapas físicos, navegación y stock compartido en ambos tem
       assert.ok(contrasts.every(item=>item.ratio>=4.5),JSON.stringify(contrasts));
       const navigation=page.locator(width<400?'.mobile-navigation':'.side-navigation');
       const labels=await navigation.locator('.nav-link span').allTextContents();
-      assert.deepEqual(labels,width<400?['Inicio','Productos','Ubicaciones','Carga','Historial']:['Inicio','Torres','Estantes','Productos','Carga rápida','Historial']);
+      assert.deepEqual(labels,width<400?['Inicio','Productos','Ubicaciones','Carga','Historial']:['Inicio','Torres','Estantes','Productos','Carga rápida','Historial','Exportaciones']);
       await page.screenshot({path:path.join(directory,`estantes-${width}-${theme}.png`),fullPage:true});
       if(width<400) {
         await navigation.getByRole('link',{name:'Ubicaciones',exact:true}).tap();

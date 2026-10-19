@@ -49,6 +49,7 @@ a {
   position: sticky;
   top: 0;
   height: 100dvh;
+  overflow-y: auto;
 }
 .brand {
   display: flex;
@@ -106,8 +107,8 @@ a {
   font-weight: 600;
   font-size: 14px;
   transition:
-    background 0.18s,
-    color 0.18s;
+    background-color var(--motion-fast) var(--motion-ease),
+    color var(--motion-fast) var(--motion-ease);
 }
 .nav-link:hover {
   background: #28484a;
@@ -116,6 +117,8 @@ a {
 .nav-link.active {
   color: #fff;
   background: #31575a;
+  font-weight: 700;
+  box-shadow: inset 3px 0 #b8e9d7;
 }
 .nav-link.active svg {
   color: #b8e9d7;
@@ -176,20 +179,73 @@ a {
   gap: 16px;
 }
 .topbar-label {
+  display: flex;
+  align-items: center;
+  min-width: 0;
   font-size: 13px;
   color: #526669;
   font-weight: 600;
   white-space: nowrap;
 }
+.topbar-system {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.topbar-section {
+  flex: none;
+}
 .topbar-separator {
+  flex: none;
   color: var(--muted);
   margin: 0 8px;
 }
 .topbar-right {
   display: flex;
+  flex: none;
   align-items: center;
   gap: 20px;
   color: #526669;
+}
+.topbar-export {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-control);
+  color: inherit;
+  transition: background-color var(--motion-fast) var(--motion-ease);
+}
+.topbar-export:hover,
+.topbar-export.active {
+  background: var(--surface-soft);
+  color: var(--green-text);
+}
+/* The sidebar already carries the sign-out button from 761px up; the topbar one is mobile-only. */
+@media (min-width: 761px) {
+  .topbar-right .signout {
+    display: none;
+  }
+}
+.skip-link {
+  position: fixed;
+  top: 8px;
+  left: 8px;
+  z-index: 100;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-control);
+  background: var(--action);
+  color: var(--action-text);
+  font-size: var(--text-secondary);
+  font-weight: 700;
+  transform: translateY(-200%);
+}
+.skip-link:focus {
+  transform: none;
+}
+.main-content:focus {
+  outline: none;
 }
 .topbar-right .signout {
   border: 1px solid var(--line);
@@ -882,7 +938,14 @@ a {
   }
   .topbar {
     height: 64px;
-    padding: 0 20px;
+    padding: 0 16px;
+    gap: var(--space-2);
+  }
+  .topbar-right {
+    gap: var(--space-1);
+  }
+  .topbar-export {
+    display: inline-flex;
   }
   .mobile-brand {
     display: flex;
