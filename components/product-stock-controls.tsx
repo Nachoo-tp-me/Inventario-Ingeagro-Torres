@@ -2,7 +2,9 @@
 
 import { useState } from "react";
 import { MapPin, Plus } from "lucide-react";
+import { BoxCode } from "@/components/shelf-grid";
 import { StockActionMenu, StockOperationDialog, type StockOperationStart } from "@/components/stock-operation";
+import { unitsLabel } from "@/lib/product-presentation";
 import type { ProductLocation } from "@/lib/product-catalog";
 import type { PhysicalLocationOption, ProductOption } from "@/lib/stock-model";
 
@@ -32,8 +34,8 @@ export function ProductStockControls({
           {locations.map((location) => (
             <li key={location.id}>
               <div className="stock-location-main">
-                <span><MapPin size={18} aria-hidden="true" /> {location.codigo}</span>
-                <strong>{location.cantidad.toLocaleString("es-CL")} unidades</strong>
+                <span className="catalog-location-code"><MapPin size={18} aria-hidden="true" /><BoxCode code={location.codigo} /></span>
+                <strong>{unitsLabel(location.cantidad)}</strong>
               </div>
               <div className="stock-location-actions">
                 <StockActionMenu showEntry={false} onSelect={(tipo) => {

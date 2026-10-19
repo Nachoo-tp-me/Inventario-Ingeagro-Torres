@@ -1,9 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Package, Pencil } from "lucide-react";
+import { ArrowLeft, Pencil } from "lucide-react";
 import { getProduct } from "@/lib/product-catalog";
 import { getPhysicalLocations } from "@/lib/stock-data";
+import { locationsLabel, unitsLabel } from "@/lib/product-presentation";
 import { ProductStockControls } from "@/components/product-stock-controls";
+import { ProductPhoto } from "@/components/product-photo";
 
 export default async function ProductDetailPage({
   params,
@@ -18,7 +20,7 @@ export default async function ProductDetailPage({
   const { product, locations } = detail;
   const { guardado } = await searchParams;
   return (
-    <div className="page-stack">
+    <div className="page-stack product-page">
       <Link href="/productos" className="back-link"><ArrowLeft size={17} aria-hidden="true" /> Volver a productos</Link>
       {guardado === "1" && <p className="catalog-message success" role="status">Producto guardado correctamente.</p>}
       <div className="catalog-heading-row">
@@ -27,31 +29,25 @@ export default async function ProductDetailPage({
           <h1>{product.nombre}</h1>
           <p className="page-description">{product.categoria}</p>
         </div>
-        <Link href={`/productos/${product.id}/editar`} className="catalog-button primary"><Pencil size={17} aria-hidden="true" /> Editar</Link>
+        <Link href={`/productos/${product.id}/editar`} className="catalog-button"><Pencil size={17} aria-hidden="true" /> Editar</Link>
       </div>
-      <div className="catalog-detail-grid">
-        <div className="catalog-detail-photo">
-          {product.fotoUrl ? (
-            // URL firmada del bucket privado.
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={product.fotoUrl} alt={`Fotografía de ${product.nombre}`} />
-          ) : <div className="catalog-detail-placeholder"><Package size={62} aria-hidden="true" /><span>Sin fotografía</span></div>}
-        </div>
-        <div className="catalog-detail-copy">
-          <span className="catalog-category">{product.categoria}</span>
-          <h2>Descripción</h2>
-          <p className="catalog-description">{product.descripcion || "Sin descripción."}</p>
-          <div className="catalog-stock-summary">
-            <div><span>Stock total</span><strong>{product.stock.toLocaleString("es-CL")}</strong><small>unidades</small></div>
-            <div><span>Ubicaciones</span><strong>{product.ubicaciones.toLocaleString("es-CL")}</strong><small>con stock</small></div>
-          </div>
-        </div>
+      <div className="catalog-stock-summary">
+        <div><span>Stock total</span><strong>{unitsLabel(product.stock)}</strong></div>
+        <div><span>Ubicaciones</span><strong>{locationsLabel(product.ubicaciones)}</strong></div>
       </div>
       <ProductStockControls
         product={{ id: product.id, nombre: product.nombre, categoria: product.categoria }}
         locations={locations}
         physicalLocations={compartments}
       />
+      <details className="catalog-secondary">
+        <summary>Descripción y fotografía</summary>
+        <div className="catalog-secondary-body">
+          <ProductPhoto url={product.fotoUrl} name={product.nombre} />
+          <h2>Descripción</h2>
+          <p className="catalog-description">{product.descripcion || "Sin descripción."}</p>
+        </div>
+      </details>
     </div>
   );
 }

@@ -268,6 +268,7 @@ test("UI04a: navegación accesible, estados activos, Exportaciones, cierre de se
       assert.equal(await page.evaluate(() => document.activeElement?.id), "contenido");
       await page.keyboard.press("Tab");
       assert.equal(await name(), "Primer control del contenido");
+      await page.waitForTimeout(300); // fin de la transición de color tras aplicar el tema (evita medir un color intermedio)
       // Los enlaces activos y el texto de navegación mantienen contraste ≥4,5:1 en el tema actual.
       for (const selector of [".side-navigation .nav-link", ".mobile-navigation .nav-link", ".topbar-label span", ".location-navigation a"])
         for (const sample of await paint(page, selector)) assert.ok(ratio(sample.fg, sample.bg) >= 4.5, `${selector} «${sample.text}» ${ratio(sample.fg, sample.bg).toFixed(2)}`);
