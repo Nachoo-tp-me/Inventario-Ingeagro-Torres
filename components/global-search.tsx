@@ -33,7 +33,7 @@ export function GlobalSearch() {
     <div className="search-preview">
       <Search size={22} aria-hidden="true" />
       <input type="search" value={query} onChange={(event) => { setQuery(event.target.value); setResult(null); setLoading(false); setError(false); }}
-        placeholder="Producto, categoría o código de ubicación" aria-label="Buscar producto, categoría o ubicación"
+        placeholder="Producto, categoría o código" aria-label="Buscar producto, categoría o ubicación"
         autoComplete="off" maxLength={100} />
       {loading && <span className="search-feedback" role="status">Buscando…</span>}
     </div>
