@@ -6,6 +6,7 @@ import { Boxes, Check, MapPin, Package, Pencil, Plus, X } from "lucide-react";
 import type { LocationContent } from "@/lib/location-content";
 import type { BoxLocationOption, PhysicalLocationOption, ProductOption } from "@/lib/stock-model";
 import { BoxCodeDialog } from "@/components/box-code-dialog";
+import { BoxCode } from "@/components/shelf-grid";
 import { StockActionMenu, StockOperationDialog, type StockOperationStart } from "@/components/stock-operation";
 
 export function LocationDetail({
@@ -77,7 +78,7 @@ export function LocationDetail({
           <header className="sheet-header">
             <div>
               <p className="eyebrow">DETALLE DE UBICACIÓN</p>
-              <h2 id="compartment-dialog-title">{compartment.codigo}</h2>
+              <h2 id="compartment-dialog-title">{kind === "caja" ? <BoxCode code={compartment.codigo} /> : compartment.codigo}</h2>
             </div>
             <button
               type="button"

@@ -23,6 +23,8 @@
   --green: #168365;
   --red: #d15e62;
   --font-ui: Arial, Helvetica, sans-serif;
+  /* Local monospace for physical location codes; no web font download. */
+  --font-code: Consolas, "Cascadia Mono", "Liberation Mono", "Courier New", monospace;
   --text-body: 16px;
   --text-secondary: 14px;
   --text-help: 12px;
