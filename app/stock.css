@@ -54,6 +54,9 @@
   box-shadow: 0 25px 60px #061f1f40;
 }
 .stock-dialog::backdrop { background: #0b272ac9; }
+/* Operation opened over the detail sheet: avoid stacking two full-strength veils. */
+body:has(.compartment-dialog[open]) .stock-dialog::backdrop { background: #0b272a66; }
+
 .stock-dialog-inner { padding: 25px; min-width: 0; }
 .stock-dialog-header { display: flex; align-items: start; justify-content: space-between; gap: 12px; margin-bottom: 20px; }
 .stock-dialog-header h2 { margin: 0; font-size: 25px; line-height: 1.15; letter-spacing: -.03em; }
@@ -93,7 +96,30 @@
 .stock-picker-hint { color: var(--muted); font-size: 11px; }
 .stock-picked { display: inline-flex; align-items: center; gap: 5px; margin: 0; color: var(--green-text); font-size: 12px; font-weight: 700; overflow-wrap: anywhere; }
 .stock-available, .stock-delta { margin: -7px 0 0; color: var(--muted); font-size: 12px; }
-.stock-delta { color: var(--ink); font-weight: 750; }
+.stock-delta { display: flex; align-items: center; gap: 6px; color: var(--ink); font-size: var(--text-secondary); font-weight: 750; }
+.stock-delta svg { flex: none; }
+.stock-delta.increase { color: var(--success-text); }
+.stock-adjustment { display: grid; gap: var(--space-4); min-width: 0; }
+.stock-adjustment-context { display: flex; align-items: center; gap: var(--space-3); min-width: 0; padding-bottom: var(--space-4); border-bottom: 1px solid var(--line); color: var(--green-text); }
+.stock-adjustment-context > div { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.stock-adjustment-context strong { color: var(--ink); font-size: 17px; line-height: 1.3; overflow-wrap: anywhere; }
+.stock-adjustment-context small { color: var(--muted); font-size: var(--text-secondary); overflow-wrap: anywhere; }
+.stock-adjustment-counts { display: flex; align-items: center; gap: var(--space-3); min-width: 0; color: var(--muted); }
+.stock-adjustment-counts > div { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.stock-adjustment-counts span { font-size: var(--text-secondary); }
+.stock-adjustment-counts strong { color: var(--ink); font-size: 32px; line-height: 1.1; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.stock-adjustment-counts small { font-size: var(--text-secondary); }
+.stock-adjustment-counts svg { flex: none; }
+/* Direction is informative, not an error or alert: neutral/success surfaces, never the error tokens. */
+.stock-adjustment-result { display: flex; align-items: center; gap: var(--space-3); margin: 0; padding: var(--space-3) var(--space-4); border: 1px solid var(--line); border-left-width: 4px; border-radius: var(--radius-control); background: var(--surface-selected); color: var(--ink); font-size: 17px; font-weight: 700; line-height: 1.3; overflow-wrap: anywhere; }
+.stock-adjustment-result svg { flex: none; }
+.stock-adjustment-result.increase { background: var(--success-bg); border-color: var(--success-text); color: var(--success-text); }
+.stock-adjustment-result.decrease { border-color: var(--control-border); }
+.stock-adjustment-result.none { background: var(--surface-soft); color: var(--muted); }
+@media (max-width: 359px) {
+  .stock-adjustment-counts { flex-direction: column; align-items: stretch; }
+  .stock-adjustment-counts > svg { align-self: center; transform: rotate(90deg); }
+}
 .stock-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; padding-top: 18px; border-top: 1px solid var(--line); }
 .stock-confirmation { display: grid; gap: 14px; }
 .stock-confirmation > p:first-child { margin: 0; color: var(--muted); font-size: 14px; }
@@ -123,13 +149,16 @@
 .history-type { font-size: 10px; letter-spacing: .09em; font-weight: 800; color: var(--muted); text-transform: uppercase; }
 .history-pagination { display: flex; justify-content: space-between; gap: 15px; align-items: center; }
 .history-pagination span { color: var(--muted); font-size: 13px; }
+/* Same breakpoint as the detail sheet (tower-view.css, 760px) so a nested operation never sits as a centered modal over a bottom sheet. */
+@media (max-width: 760px) {
+  .stock-dialog { inset: auto 0 0 0; margin: 0; width: 100%; max-width: none; max-height: 87dvh; border-radius: var(--radius-dialog) var(--radius-dialog) 0 0; }
+  .stock-dialog-inner { padding: var(--space-6) var(--space-4) calc(var(--space-6) + env(safe-area-inset-bottom)); }
+  .stock-dialog-actions { flex-direction: column-reverse; }
+  .stock-dialog-actions > * { width: 100%; min-height: 48px; }
+}
 @media (max-width: 680px) {
   .catalog-section-heading { flex-direction: column; align-items: stretch; }
   .catalog-section-heading .catalog-button { width: 100%; }
-  .stock-dialog { inset: auto 0 0 0; margin: 0; width: 100%; max-height: 87dvh; border-radius: 20px 20px 0 0; }
-  .stock-dialog-inner { padding: 23px 18px calc(25px + env(safe-area-inset-bottom)); }
-  .stock-dialog-actions { flex-direction: column-reverse; }
-  .stock-dialog-actions > * { width: 100%; min-height: 48px; }
   .history-card { align-items: start; flex-wrap: wrap; gap: 10px; padding: 15px; }
   .history-date { width: 100%; text-align: left; padding-left: 49px; }
 }

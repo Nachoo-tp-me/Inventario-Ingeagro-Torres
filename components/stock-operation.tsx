@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore, type FormEvent } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Check, Package, Search, X } from "lucide-react";
+import { ArrowDown, ArrowRight, ArrowUp, Check, Equal, Package, Search, X } from "lucide-react";
 import { submitStockOperation } from "@/app/(workspace)/stock-actions";
 import { StockActionMenu } from "@/components/stock-action-menu";
 import { matchesCatalogQuery } from "@/lib/rapid-model";
@@ -33,6 +33,18 @@ const TITLES: Record<StockOperationType, string> = {
 };
 
 const subscribeToBrowser = () => () => {};
+
+function units(count: number) {
+  return `${count.toLocaleString("es-CL")} ${count === 1 ? "unidad" : "unidades"}`;
+}
+
+// Presentation only: direction is conveyed by text, sign and icon, never by color alone.
+function describeAdjustment(delta: number) {
+  const size = Math.abs(delta);
+  if (delta < 0) return { kind: "decrease", Icon: ArrowDown, text: `Disminuye ${units(size)} · −${size.toLocaleString("es-CL")}` };
+  if (delta > 0) return { kind: "increase", Icon: ArrowUp, text: `Aumenta ${units(size)} · +${size.toLocaleString("es-CL")}` };
+  return { kind: "none", Icon: Equal, text: "Sin diferencia · 0" };
+}
 
 export { StockActionMenu };
 
@@ -160,6 +172,8 @@ export function StockOperationDialog({
   const adjustmentDelta = operation.tipo === "ajuste" && entered !== null
     ? entered - (operation.currentStock ?? 0) : null;
 
+  const adjustment = adjustmentDelta === null ? null : describeAdjustment(adjustmentDelta);
+
   if (!isBrowser) return null;
 
   return createPortal(
@@ -178,14 +192,30 @@ export function StockOperationDialog({
         {confirming ? (
           <form onSubmit={handleSubmit} className="stock-confirmation">
             <p>Confirma antes de registrar este movimiento:</p>
-            <strong>{operation.tipo === "ajuste"
-              ? `Ajustar ${selectedProduct?.nombre ?? "producto"} de ${operation.currentStock} a ${entered} unidades`
-              : `${TITLES[operation.tipo]}: ${quantity} unidades de ${selectedProduct?.nombre ?? "producto"}`}</strong>
-            <div className="stock-confirm-route">
-              {operation.tipo === "ajuste"
-                ? <span>{origin?.codigo} · {adjustmentDelta === null ? "" : adjustmentDelta > 0 ? `+${adjustmentDelta}` : adjustmentDelta} unidades</span>
-                : <><span>{origin?.codigo ?? "Inventario"}</span><ArrowRight size={18} aria-hidden="true" /><span>{destination?.codigo ?? "Salida"}</span></>}
-            </div>
+            {operation.tipo === "ajuste" && adjustment ? (
+              <div className="stock-adjustment">
+                <div className="stock-adjustment-context">
+                  <Package size={20} aria-hidden="true" />
+                  <div>
+                    <strong>{selectedProduct?.nombre ?? "Producto"}</strong>
+                    <small>{origin ? `${origin.codigo} · ${physicalLocationContext(origin)}` : ""}</small>
+                  </div>
+                </div>
+                <div className="stock-adjustment-counts">
+                  <div><span>Stock mostrado</span><strong>{(operation.currentStock ?? 0).toLocaleString("es-CL")}</strong><small>{(operation.currentStock ?? 0) === 1 ? "unidad" : "unidades"}</small></div>
+                  <ArrowRight size={20} aria-hidden="true" />
+                  <div><span>Conteo físico</span><strong>{(entered ?? 0).toLocaleString("es-CL")}</strong><small>{entered === 1 ? "unidad" : "unidades"}</small></div>
+                </div>
+                <p className={`stock-adjustment-result ${adjustment.kind}`}><adjustment.Icon size={22} aria-hidden="true" /><span>{adjustment.text}</span></p>
+              </div>
+            ) : (
+              <>
+                <strong>{`${TITLES[operation.tipo]}: ${quantity} unidades de ${selectedProduct?.nombre ?? "producto"}`}</strong>
+                <div className="stock-confirm-route">
+                  <span>{origin?.codigo ?? "Inventario"}</span><ArrowRight size={18} aria-hidden="true" /><span>{destination?.codigo ?? "Salida"}</span>
+                </div>
+              </>
+            )}
             {error && <p role="alert" className="catalog-message error">{error}</p>}
             <div className="stock-dialog-actions">
               <button type="button" className="catalog-quiet-button" disabled={pending} onClick={() => setConfirming(false)}>Volver</button>
@@ -210,7 +240,7 @@ export function StockOperationDialog({
             )}
 
             {operation.origenId && <div className="stock-fixed-choice"><div><small>Ubicación de origen</small><strong>{origin?.codigo}</strong></div></div>}
-            {operation.tipo === "ajuste" && <div className="stock-current"><span>Stock registrado</span><strong>{operation.currentStock?.toLocaleString("es-CL") ?? 0} unidades</strong></div>}
+            {operation.tipo === "ajuste" && <div className="stock-current"><span>Stock mostrado</span><strong>{operation.currentStock?.toLocaleString("es-CL") ?? 0} unidades</strong></div>}
             {(operation.tipo === "entrada" || operation.tipo === "traslado") && (
               operation.destinoId ? (
                 <div className="stock-fixed-choice"><div><small>Ubicación de destino</small><strong>{destination?.codigo}</strong></div></div>
@@ -229,10 +259,10 @@ export function StockOperationDialog({
             )}
 
             <label className="catalog-field" htmlFor="stock-quantity">
-              <span>{operation.tipo === "ajuste" ? "Cantidad física real" : "Cantidad de unidades"}</span>
+              <span>{operation.tipo === "ajuste" ? "Conteo físico" : "Cantidad de unidades"}</span>
               <input id="stock-quantity" type="text" inputMode="numeric" pattern="[0-9]*" value={quantity} onChange={(event) => setQuantity(event.target.value)} placeholder={operation.tipo === "ajuste" ? "Ej. 15" : "Ej. 7"} autoComplete="off" disabled={pending} />
             </label>
-            {operation.tipo === "ajuste" && adjustmentDelta !== null && <p className="stock-delta">Variación: {adjustmentDelta > 0 ? "+" : ""}{adjustmentDelta.toLocaleString("es-CL")} unidades</p>}
+            {operation.tipo === "ajuste" && adjustment && <p className={`stock-delta ${adjustment.kind}`}><adjustment.Icon size={16} aria-hidden="true" /><span>{adjustment.text}</span></p>}
             {(operation.tipo === "retiro" || operation.tipo === "traslado") && <p className="stock-available">Disponible en origen: {operation.currentStock?.toLocaleString("es-CL") ?? 0} unidades</p>}
             {error && <p role="alert" className="catalog-message error">{error}</p>}
             <div className="stock-dialog-actions">
