@@ -1,14 +1,5 @@
 @import "tailwindcss";
 
-:root {
-  --ink: #183335;
-  --muted: #596b70;
-  --line: #e3e9e8;
-  --canvas: #f5f8f7;
-  --green: #168365;
-  --green-text: #26765e;
-  --red: #d15e62;
-}
 * {
   box-sizing: border-box;
 }
@@ -19,11 +10,15 @@ body {
   margin: 0;
   background: var(--canvas);
   color: var(--ink);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-ui);
+  font-size: var(--text-body);
+  line-height: 1.45;
   -webkit-font-smoothing: antialiased;
 }
 button,
-input {
+input,
+textarea,
+select {
   font: inherit;
 }
 button {
@@ -34,7 +29,7 @@ a {
   color: inherit;
 }
 :focus-visible {
-  outline: 3px solid #57b69b;
+  outline: 3px solid var(--focus-ring);
   outline-offset: 3px;
 }
 .app-shell {
@@ -43,6 +38,7 @@ a {
   min-width: 0;
 }
 .sidebar {
+  --focus-ring: var(--focus-on-dark);
   width: 238px;
   flex: none;
   background: #173638;
@@ -226,7 +222,7 @@ a {
   letter-spacing: 0.17em;
 }
 .page-heading h1 {
-  font-size: clamp(30px, 3vw, 43px);
+  font-size: var(--text-title);
   line-height: 1.1;
   letter-spacing: -0.038em;
   margin: 0;
@@ -334,6 +330,11 @@ a {
 }
 .search-preview input::placeholder {
   color: var(--muted);
+  opacity: 1;
+}
+.search-preview:focus-within {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 3px;
 }
 .search-coming {
   font-size: 11px;
@@ -352,7 +353,7 @@ a {
 .metric-card {
   background: #fff;
   border: 1px solid var(--line);
-  border-radius: 15px;
+  border-radius: var(--radius-card);
   min-width: 0;
   padding: 22px 23px;
   box-shadow: 0 5px 15px #1a393008;
@@ -440,7 +441,7 @@ a {
   min-width: 0;
   background: #fff;
   border: 1px solid var(--line);
-  border-radius: 17px;
+  border-radius: var(--radius-card);
   padding: 22px 24px 0;
   box-shadow: 0 6px 20px #23454108;
   transition:
@@ -628,9 +629,9 @@ a {
 }
 .primary-button {
   border: 0;
-  border-radius: 9px;
-  background: #187a61;
-  color: #fff;
+  border-radius: var(--radius-control);
+  background: var(--action);
+  color: var(--action-text);
   font-weight: 700;
   min-height: 44px;
   padding: 0 20px;
@@ -770,16 +771,17 @@ a {
   align-items: center;
   gap: 11px;
   background: #fff;
-  border: 1px solid #d9e4e1;
-  border-radius: 10px;
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius-control);
   height: 52px;
   padding: 0 15px;
   color: #859995;
   transition: border-color 0.2s;
 }
 .field-wrap:focus-within {
-  border-color: #49a68d;
-  box-shadow: 0 0 0 3px #49a68d19;
+  border-color: var(--focus-ring);
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 2px;
 }
 .field-wrap input {
   border: 0;
@@ -807,10 +809,10 @@ a {
   margin-top: 18px;
   min-height: 53px;
   border: 0;
-  border-radius: 10px;
-  background: #177f64;
-  color: #fff;
-  font-size: 14px;
+  border-radius: var(--radius-control);
+  background: var(--action);
+  color: var(--action-text);
+  font-size: var(--text-secondary);
   font-weight: 800;
   display: flex;
   align-items: center;
@@ -819,10 +821,18 @@ a {
 }
 .login-submit:hover,
 .primary-button:hover {
-  background: #0e6f56;
+  background: var(--action-hover);
 }
-.login-submit:disabled {
-  opacity: 0.7;
+.login-submit:active,
+.primary-button:active {
+  background: var(--action-active);
+}
+.login-submit:disabled,
+.primary-button:disabled {
+  opacity: 1;
+  background: var(--surface-soft);
+  color: var(--muted);
+  cursor: not-allowed;
 }
 .login-message {
   margin: 6px 0 0;
@@ -900,7 +910,7 @@ a {
     gap: 23px;
   }
   .page-heading h1 {
-    font-size: 32px;
+    font-size: var(--text-title-mobile);
   }
   .page-description {
     font-size: 14px;
@@ -961,18 +971,19 @@ a {
     padding: 6px 0;
     border-radius: 9px;
     color: var(--muted);
-    font-size: 10px;
+    font-size: var(--text-help);
     font-weight: 700;
   }
   .mobile-navigation .nav-link:hover {
-    color: #fff;
+    background: var(--surface-soft);
+    color: var(--green-text);
   }
   .mobile-navigation .nav-link.active {
-    background: #eaf5f0;
-    color: #147b61;
+    background: var(--surface-soft);
+    color: var(--green-text);
   }
   .mobile-navigation .nav-link.active svg {
-    color: #147b61;
+    color: var(--green-text);
   }
   .login-page {
     grid-template-columns: 1fr;
@@ -1001,6 +1012,17 @@ a {
   }
   .login-card h2 {
     font-size: 34px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
 @media (max-width: 430px) {

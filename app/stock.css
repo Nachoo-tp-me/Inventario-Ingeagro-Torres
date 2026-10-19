@@ -3,10 +3,10 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 40px;
+  min-height: 44px;
   padding: 8px 11px;
-  border: 1px solid var(--line);
-  border-radius: 9px;
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius-control);
   background: var(--catalog-surface);
   color: var(--green-text);
   font-size: 12px;
@@ -47,7 +47,7 @@
   max-height: min(92dvh, 900px);
   padding: 0;
   border: 1px solid var(--line);
-  border-radius: 18px;
+  border-radius: var(--radius-dialog);
   overflow-y: auto;
   background: var(--catalog-surface);
   color: var(--ink);
@@ -79,7 +79,7 @@
 .stock-search-field { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 0 13px; border: 1px solid var(--line); border-radius: 10px; background: var(--catalog-field); color: var(--muted); }
 .stock-search-field input { width: 100%; min-width: 0; min-height: 47px; padding: 8px 0; border: 0; outline: 0; color: var(--ink); background: transparent; font-size: 16px; }
 .stock-search-field input::placeholder { color: var(--muted); opacity: 1; }
-.stock-search-field:focus-within { outline: 3px solid #57b69b; outline-offset: 2px; }
+.stock-search-field:focus-within { outline: 3px solid var(--focus-ring); outline-offset: 2px; }
 .stock-option-list { display: grid; max-height: 188px; overflow-y: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--catalog-surface); }
 .stock-option-list button { display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 8px 12px; border: 0; border-bottom: 1px solid var(--line); background: transparent; color: var(--ink); text-align: left; }
 .stock-option-list button:last-child { border-bottom: 0; }

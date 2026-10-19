@@ -1,5 +1,46 @@
 :root {
   color-scheme: light;
+  --ink: #173638;
+  --muted: #4e6267;
+  --line: #d8e3df;
+  --canvas: #f5f7f6;
+  --surface: #fff;
+  --surface-soft: #eaf0ee;
+  --surface-selected: #e1ebe8;
+  --control-border: #75877f;
+  --green-text: #176f5d;
+  --action: #176f5d;
+  --action-hover: #125b4d;
+  --action-active: #0f4b40;
+  --action-text: #fff;
+  --focus-ring: #176f5d;
+  --focus-on-dark: #70d8ba;
+  --error-bg: #fdecee;
+  --error-text: #9f3041;
+  --success-bg: #e7f3ed;
+  --success-text: #19634f;
+  /* Occupancy keeps its existing green/red paints until UI03. */
+  --green: #168365;
+  --red: #d15e62;
+  --font-ui: Arial, Helvetica, sans-serif;
+  --text-body: 16px;
+  --text-secondary: 14px;
+  --text-help: 12px;
+  --text-title: 32px;
+  --text-title-mobile: 28px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --radius-control: 8px;
+  --radius-card: 12px;
+  --radius-dialog: 14px;
+  /* Prepared for later screen work; existing transition timing is preserved. */
+  --motion-fast: 160ms;
+  --motion-panel: 220ms;
+  --motion-ease: ease-out;
 }
 
 .theme-toggle {
@@ -10,15 +51,21 @@
   gap: 9px;
   padding: 0 12px;
   border: 1px solid var(--line);
-  border-radius: 10px;
-  background: #fff;
-  color: #315f59;
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  color: var(--green-text);
   font-size: 12px;
   font-weight: 700;
   white-space: nowrap;
 }
 .theme-toggle:hover {
-  background: #eaf5f0;
+  background: var(--surface-soft);
+}
+.theme-toggle:active {
+  background: var(--surface-selected);
+}
+.compartment-dialog {
+  border-radius: var(--radius-dialog);
 }
 .theme-icon-light,
 .theme-label-light {
@@ -35,15 +82,22 @@
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --ink: #eaf3f1;
-  --muted: #a9bfbd;
-  --line: #355057;
-  --canvas: #0c1d22;
+  --ink: #ecf3f1;
+  --muted: #b3c8c6;
+  --line: #35545b;
+  --canvas: #0d1d22;
   --green: #69d5a5;
-  --green-text: var(--green);
+  --green-text: #70d8ba;
   --red: #f28a91;
-  --surface: #183037;
+  --surface: #162f35;
   --surface-soft: #203b42;
+  --surface-selected: #25434b;
+  --control-border: #819b97;
+  --focus-ring: #70d8ba;
+  --error-bg: #44262d;
+  --error-text: #ffb4c1;
+  --success-bg: #173c31;
+  --success-text: #9be2bf;
 }
 :root[data-theme="dark"] .theme-icon-dark,
 :root[data-theme="dark"] .theme-label-dark {
@@ -55,10 +109,10 @@
 }
 :root[data-theme="dark"] .theme-toggle {
   background: var(--surface-soft);
-  color: #d9f1e8;
+  color: var(--green-text);
 }
 :root[data-theme="dark"] .theme-toggle:hover {
-  background: #2a5052;
+  background: var(--surface-selected);
 }
 :root[data-theme="dark"] .topbar-separator {
   color: #a7b7b7;
@@ -97,7 +151,7 @@
 :root[data-theme="dark"] .product-copy span,
 :root[data-theme="dark"] .sheet-empty p,
 :root[data-theme="dark"] .login-card-foot {
-  color: #adc4c1;
+  color: var(--muted);
 }
 :root[data-theme="dark"] .search-preview,
 :root[data-theme="dark"] .search-preview input::placeholder,
@@ -106,7 +160,7 @@
 :root[data-theme="dark"] .tower-arrow,
 :root[data-theme="dark"] .sheet-separator,
 :root[data-theme="dark"] .product-quantity span {
-  color: #98b2af;
+  color: var(--muted);
 }
 :root[data-theme="dark"] .search-coming,
 :root[data-theme="dark"] .metric-icon,
@@ -144,9 +198,11 @@
 :root[data-theme="dark"] .back-link,
 :root[data-theme="dark"] .page-heading .eyebrow,
 :root[data-theme="dark"] .eyebrow,
-:root[data-theme="dark"] .tower-summary-item.available strong,
 :root[data-theme="dark"] .sheet-location svg,
 :root[data-theme="dark"] .product-quantity {
+  color: var(--green-text);
+}
+:root[data-theme="dark"] .tower-summary-item.available strong {
   color: #8cddb4;
 }
 :root[data-theme="dark"] .tower-summary-item.occupied strong {
@@ -175,11 +231,11 @@
   color: #d2e4e0;
 }
 :root[data-theme="dark"] .field-wrap {
-  border-color: var(--line);
+  border-color: var(--control-border);
   color: #a6c1b9;
 }
 :root[data-theme="dark"] .field-wrap input::placeholder {
-  color: #9bb0ae;
+  color: var(--muted);
 }
 :root[data-theme="dark"] .password-toggle,
 :root[data-theme="dark"] .sheet-close {
@@ -295,6 +351,9 @@
 }
 
 @media (max-width: 760px) {
+  .compartment-dialog {
+    border-radius: var(--radius-dialog) var(--radius-dialog) 0 0;
+  }
   .theme-toggle {
     width: 44px;
     padding: 0;
