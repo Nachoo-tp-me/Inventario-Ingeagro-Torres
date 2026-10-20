@@ -1,11 +1,26 @@
-.export-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
-.export-card { display: flex; flex-direction: column; min-width: 0; border: 1px solid var(--line); border-radius: 16px; background: var(--catalog-surface); padding: 24px; }
-.export-icon { display: grid; place-items: center; width: 52px; height: 52px; border-radius: 13px; background: var(--catalog-soft); color: var(--green); }
-.export-card h2 { font-size: 22px; margin: 20px 0 7px; }
-.export-card p { min-height: 65px; margin: 0 0 20px; font-size: 13px; line-height: 1.5; color: var(--muted); }
-.export-card .catalog-button { margin-top: auto; width: 100%; min-height: 48px; }
-.export-note { color: var(--muted); font-size: 13px; line-height: 1.5; margin: 0; }
+.export-grid { display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; gap: var(--space-4); }
+.export-card { position: relative; display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; border: 1px solid var(--line); border-radius: var(--radius-card); background: var(--catalog-surface); padding: var(--space-4); }
+.export-card-head { display: flex; align-items: center; gap: var(--space-3); min-width: 0; }
+.export-icon { display: grid; place-items: center; flex: none; width: 44px; height: 44px; border-radius: var(--radius-control); background: var(--catalog-soft); color: var(--green-text); }
+.export-card h2 { font-size: 20px; margin: 0; }
+.export-ext { display: inline-block; margin-top: var(--space-1); padding: 0 var(--space-2); border-radius: 999px; background: var(--surface-soft); color: var(--ink); font-family: var(--font-code); font-size: var(--text-secondary); font-weight: 700; }
+.export-desc { margin: 0; font-size: var(--text-secondary); line-height: 1.5; color: var(--muted); }
+.export-filename { margin: 0; font-size: var(--text-help); line-height: 1.4; color: var(--muted); overflow-wrap: anywhere; }
+.export-filename code { font-family: var(--font-code); font-weight: 700; color: var(--ink); }
+.export-card .catalog-button { width: 100%; min-height: 48px; }
+.export-card .catalog-message { margin: 0; }
+.export-status { margin: 0; font-size: var(--text-secondary); line-height: 1.4; color: var(--ink); }
+.export-status:empty { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.export-lock { margin: 0; font-size: var(--text-secondary); line-height: 1.4; color: var(--muted); }
+.export-details { border-top: 1px solid var(--line); }
+.export-details summary { display: flex; align-items: center; min-height: 44px; cursor: pointer; color: var(--green-text); font-size: var(--text-secondary); font-weight: 700; }
+.export-details ul { display: grid; gap: var(--space-1); margin: 0 0 var(--space-2); padding-left: var(--space-4); color: var(--muted); font-size: var(--text-secondary); line-height: 1.5; }
+.export-details li { overflow-wrap: anywhere; }
+.export-note { color: var(--muted); font-size: var(--text-secondary); line-height: 1.5; margin: 0; }
 .export-home-link { display: flex; align-items: center; gap: 9px; min-height: 46px; width: fit-content; max-width: 100%; color: var(--green); font-size: 14px; font-weight: 750; }
 .export-home-link svg:last-child { flex: none; }
-@media (max-width: 900px) { .export-grid { grid-template-columns: 1fr; } .export-card p { min-height: 0; } }
-@media (max-width: 380px) { .export-card { padding: 19px; } }
+@media (min-width: 1000px) {
+  .export-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-6); }
+  .export-card { padding: var(--space-6); }
+  .export-desc { min-height: 4.5em; }
+}
