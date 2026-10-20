@@ -1,0 +1,354 @@
+{
+  "_nota": "REGLAS PROPUESTAS. No constituyen aprobación individual final: la promoción de referencias V2 exige autorización de Gepeto/Nacho y revisión visual humana. Cada regla fija escenas y elementos exactos (sin comodines). Base histórica: bb2618218ec0acda18be6f5d575c40e502169eb3.",
+  "baseRevision": "bb2618218ec0acda18be6f5d575c40e502169eb3",
+  "rules": [
+    {
+      "id": "UI04A-skip-link",
+      "block": "UI04a",
+      "commit": "3e2d9ca",
+      "array": "links",
+      "change": "added",
+      "scenes": [
+        "home",
+        "catalog",
+        "catalog-hover",
+        "form",
+        "control-focus",
+        "control-active",
+        "category-hover",
+        "tower",
+        "compartment",
+        "menu",
+        "stock",
+        "empty-compartment",
+        "shelves",
+        "navigation-hover",
+        "navigation-focus"
+      ],
+      "elements": [
+        [
+          "#contenido",
+          "Saltar al contenido"
+        ]
+      ],
+      "description": "Enlace «Saltar al contenido» añadido al AppShell (visible solo con foco).",
+      "justification": "Nuevo en components/app-shell.tsx de UI04a; accesibilidad de teclado. No existe en bb26182."
+    },
+    {
+      "id": "UI04A-sidebar-exportaciones",
+      "block": "UI04a",
+      "commit": "3e2d9ca",
+      "array": "links",
+      "change": "added",
+      "scenes": [
+        "home",
+        "catalog",
+        "catalog-hover",
+        "form",
+        "control-focus",
+        "control-active",
+        "category-hover",
+        "tower",
+        "compartment",
+        "menu",
+        "stock",
+        "empty-compartment",
+        "shelves",
+        "navigation-hover",
+        "navigation-focus"
+      ],
+      "elements": [
+        [
+          "/exportaciones",
+          "Exportaciones"
+        ]
+      ],
+      "description": "Entrada «Exportaciones» en la navegación lateral.",
+      "justification": "lib/navigation-model.ts (nuevo en UI04a) define la entrada; bb26182 no tenía acceso a /exportaciones desde el shell."
+    },
+    {
+      "id": "UI04A-topbar-exportar",
+      "block": "UI04a",
+      "commit": "3e2d9ca",
+      "array": "links",
+      "change": "added",
+      "scenes": [
+        "home",
+        "catalog",
+        "catalog-hover",
+        "form",
+        "control-focus",
+        "control-active",
+        "category-hover",
+        "tower",
+        "compartment",
+        "menu",
+        "stock",
+        "empty-compartment",
+        "shelves",
+        "navigation-hover",
+        "navigation-focus"
+      ],
+      "elements": [
+        [
+          "/exportaciones",
+          ""
+        ]
+      ],
+      "description": "Atajo de exportación solo-icono en la barra superior (aria-label «Exportar inventario»).",
+      "justification": "ExportShortcut en components/app-shell.tsx (UI04a): acceso móvil sin sexta pestaña. El texto vacío es el icono."
+    },
+    {
+      "id": "UI05A-catalog-card-retirado",
+      "block": "UI05a",
+      "commit": "8f08fa2",
+      "array": "links",
+      "change": "removed",
+      "scenes": [
+        "catalog",
+        "catalog-hover"
+      ],
+      "elements": [
+        [
+          "/productos/fake-product",
+          "ElectrónicaMódulo térmicoDescripción de prueba y notas del producto.23 unid. 1 ubicación"
+        ]
+      ],
+      "description": "Texto anterior de la tarjeta de catálogo (categoría, descripción y «23 unid.»). Par con UI05A-catalog-card-nuevo.",
+      "justification": "UI05a compacta la tarjeta: retira la descripción y usa unitsLabel; mismo href por ID."
+    },
+    {
+      "id": "UI05A-catalog-card-nuevo",
+      "block": "UI05a",
+      "commit": "8f08fa2",
+      "array": "links",
+      "change": "added",
+      "scenes": [
+        "catalog",
+        "catalog-hover"
+      ],
+      "elements": [
+        [
+          "/productos/fake-product",
+          "Módulo térmicoElectrónica23 unidades 1 ubicación"
+        ]
+      ],
+      "description": "Nuevo texto de la tarjeta: nombre, categoría, «23 unidades» y «1 ubicación». Par con UI05A-catalog-card-retirado.",
+      "justification": "components/product-catalog-list.tsx y lib/product-presentation.ts (UI05a); el enlace y su destino no cambian."
+    },
+    {
+      "id": "UI05B1-boton-agregar-retirado",
+      "block": "UI05b-1",
+      "commit": "195b9dc",
+      "array": "buttons",
+      "change": "removed",
+      "scenes": [
+        "form",
+        "control-focus",
+        "control-active",
+        "category-hover"
+      ],
+      "elements": [
+        [
+          "Agregar producto",
+          false
+        ]
+      ],
+      "description": "Botón principal del formulario de producto con el texto anterior. Par con UI05B1-boton-crear-nuevo.",
+      "justification": "UI05b-1 renombra a «Crear producto» en el formulario completo (V14); el modo quick conserva «Agregar producto»."
+    },
+    {
+      "id": "UI05B1-boton-crear-nuevo",
+      "block": "UI05b-1",
+      "commit": "195b9dc",
+      "array": "buttons",
+      "change": "added",
+      "scenes": [
+        "form",
+        "control-focus",
+        "control-active",
+        "category-hover"
+      ],
+      "elements": [
+        [
+          "Crear producto",
+          false
+        ]
+      ],
+      "description": "Botón principal «Crear producto» del formulario completo. Par con UI05B1-boton-agregar-retirado.",
+      "justification": "components/product-form.tsx (UI05b-1); mismo botón de envío, misma acción."
+    },
+    {
+      "id": "UI03-cajas-disponibles-retirado",
+      "block": "UI03",
+      "commit": "9e5d858",
+      "array": "links",
+      "change": "removed",
+      "scenes": [
+        "shelves"
+      ],
+      "elements": [
+        [
+          "/estantes/1?caja=74",
+          "A2Superior derechaDisponible"
+        ],
+        [
+          "/estantes/1?caja=75",
+          "A3Inferior izquierdaDisponible"
+        ],
+        [
+          "/estantes/1?caja=76",
+          "A4Inferior derechaDisponible"
+        ],
+        [
+          "/estantes/2?caja=78",
+          "A6Superior derechaDisponible"
+        ],
+        [
+          "/estantes/2?caja=79",
+          "A7Inferior izquierdaDisponible"
+        ],
+        [
+          "/estantes/2?caja=80",
+          "A8Inferior derechaDisponible"
+        ],
+        [
+          "/estantes/3?caja=82",
+          "A10Superior derechaDisponible"
+        ],
+        [
+          "/estantes/3?caja=83",
+          "A11Inferior izquierdaDisponible"
+        ],
+        [
+          "/estantes/3?caja=84",
+          "A12Inferior derechaDisponible"
+        ],
+        [
+          "/estantes/4?caja=86",
+          "B2Superior derechaDisponible"
+        ],
+        [
+          "/estantes/4?caja=87",
+          "B3Inferior izquierdaDisponible"
+        ],
+        [
+          "/estantes/4?caja=88",
+          "B4Inferior derechaDisponible"
+        ],
+        [
+          "/estantes/5?caja=90",
+          "B6Superior derechaDisponible"
+        ],
+        [
+          "/estantes/5?caja=91",
+          "B7Inferior izquierdaDisponible"
+        ],
+        [
+          "/estantes/5?caja=92",
+          "B8Inferior derechaDisponible"
+        ],
+        [
+          "/estantes/6?caja=94",
+          "B10Superior derechaDisponible"
+        ],
+        [
+          "/estantes/6?caja=95",
+          "B11Inferior izquierdaDisponible"
+        ],
+        [
+          "/estantes/6?caja=96",
+          "B12Inferior derechaDisponible"
+        ]
+      ],
+      "description": "Texto anterior de las 18 cajas disponibles del resumen de estantes (código, posición y «Disponible»). Par con UI03-cajas-disponibles-nuevo.",
+      "justification": "UI03 añade «0 unidades» al texto de las cajas disponibles (components/shelf-grid.tsx); el href por ID no cambia."
+    },
+    {
+      "id": "UI03-cajas-disponibles-nuevo",
+      "block": "UI03",
+      "commit": "9e5d858",
+      "array": "links",
+      "change": "added",
+      "scenes": [
+        "shelves"
+      ],
+      "elements": [
+        [
+          "/estantes/1?caja=74",
+          "A2Superior derechaDisponible0 unidades"
+        ],
+        [
+          "/estantes/1?caja=75",
+          "A3Inferior izquierdaDisponible0 unidades"
+        ],
+        [
+          "/estantes/1?caja=76",
+          "A4Inferior derechaDisponible0 unidades"
+        ],
+        [
+          "/estantes/2?caja=78",
+          "A6Superior derechaDisponible0 unidades"
+        ],
+        [
+          "/estantes/2?caja=79",
+          "A7Inferior izquierdaDisponible0 unidades"
+        ],
+        [
+          "/estantes/2?caja=80",
+          "A8Inferior derechaDisponible0 unidades"
+        ],
+        [
+          "/estantes/3?caja=82",
+          "A10Superior derechaDisponible0 unidades"
+        ],
+        [
+          "/estantes/3?caja=83",
+          "A11Inferior izquierdaDisponible0 unidades"
+        ],
+        [
+          "/estantes/3?caja=84",
+          "A12Inferior derechaDisponible0 unidades"
+        ],
+        [
+          "/estantes/4?caja=86",
+          "B2Superior derechaDisponible0 unidades"
+        ],
+        [
+          "/estantes/4?caja=87",
+          "B3Inferior izquierdaDisponible0 unidades"
+        ],
+        [
+          "/estantes/4?caja=88",
+          "B4Inferior derechaDisponible0 unidades"
+        ],
+        [
+          "/estantes/5?caja=90",
+          "B6Superior derechaDisponible0 unidades"
+        ],
+        [
+          "/estantes/5?caja=91",
+          "B7Inferior izquierdaDisponible0 unidades"
+        ],
+        [
+          "/estantes/5?caja=92",
+          "B8Inferior derechaDisponible0 unidades"
+        ],
+        [
+          "/estantes/6?caja=94",
+          "B10Superior derechaDisponible0 unidades"
+        ],
+        [
+          "/estantes/6?caja=95",
+          "B11Inferior izquierdaDisponible0 unidades"
+        ],
+        [
+          "/estantes/6?caja=96",
+          "B12Inferior derechaDisponible0 unidades"
+        ]
+      ],
+      "description": "Nuevo texto de las 18 cajas disponibles con «0 unidades». Par con UI03-cajas-disponibles-retirado.",
+      "justification": "components/shelf-grid.tsx (UI03): conteo visible también en cajas disponibles; las 6 cajas ocupadas no cambian."
+    }
+  ]
+}

@@ -62,3 +62,102 @@ La referencia se obtuvo antes de editar estilos. Para reconstruirla en etapas fu
 **Problema heredado:** la ficha real de producto a 768 px ocupa 828 px de ancho, tanto antes como después. Se conserva como pendiente de UI05, sin ampliar esta entrega al rediseño de ficha.
 
 Los fixtures no importan servicios productivos y bloquean solicitudes externas. No se confirmó ningún movimiento real ni se ejecutaron migraciones o baterías SQL. El contraste completo en todos los navegadores, lector de pantalla, teclado virtual real y PostgREST/JWT real quedan NO VERIFICADOS. Las capturas de R2 no sustituyen estas validaciones. Evidencias y reporte de ejecución se mantienen fuera del repositorio para la revisión de Gepeto.
+
+
+# Cierre visual UI V2 (UI02–UI09)
+
+> **Estado:** UI09a cerrado (`d0d8b51`). UI09b prepara herramientas y evidencias de referencias y compatibilidad; **queda pendiente de validación final** y de la aprobación humana de los candidatos. **Este documento no declara V2 lista para producción**: la auditoría independiente preproducción, coordinada por Gepeto, es el siguiente paso.
+
+## Bloques visuales y commits locales
+
+| Bloque | Contenido | Commit |
+|---|---|---|
+| UI00–UI01 | Referencias, tokens, temas, foco y movimiento reducido | `958096c` |
+| UI02 | Confirmación de stock y diálogos | `e8da056` |
+| UI03 | Estantes, cajas y códigos completos | `9e5d858` |
+| UI04a | Navegación, barra lateral, barra superior y atajo de Exportaciones | `3e2d9ca` |
+| UI04b | Inicio con resúmenes independientes de Torres y Estantes | `6c10bfc` |
+| UI05a | Catálogo compacto y ficha stock-primero | `8f08fa2` |
+| UI05b-1 / UI05b-2 | Estructura de formularios; errores accesibles y fotografías | `195b9dc` / `a049bd5` |
+| UI06 | Carga rápida: pasos, foco y flujo quick integrado | `ca0455e` |
+| UI07 | Historial: campos separados y códigos históricos/actuales | `7c3c495` |
+| UI08 | Exportaciones: estados por formato y ayudas de compatibilidad | `00c4501` |
+| UI09a | Legibilidad (≥ 12 px), singular/plural, densidad del Historial | `d0d8b51` |
+| UI09b | Comparador de referencias, candidatos V2 y humo multi-motor | pendiente de validación final |
+
+Todos son commits locales de `feat/estantes-cajas-v2`; no se ha hecho push, merge, deploy ni migración.
+
+## Convención de ocupación
+
+**Rojo = Ocupado; verde = Disponible.** No se usa ningún otro significado para esos colores (los tipos de movimiento, los formatos de exportación y los estados de formulario se distinguen por icono, texto y signo). Los estados operativos de ocupación son idénticos al baseline histórico en las 120 capturas de `ui-foundation`.
+
+## Tokens y tipografía
+
+Definidos en `app/theme.css` y consumidos por las hojas de pantalla:
+- Texto: `--text-help` 12 px (mínimo de cualquier texto visible, protegido por `tests/css-readability.test.mjs` y `tests/readability.browser.mjs`), `--text-secondary` 14 px, `--text-body` 16 px, títulos 32 px (28 px en móvil).
+- Espacio 4/8/12/16/24/32 px (`--space-1…8`); radios 8/12/14 px; fuente de códigos `--font-code`.
+- Acción, foco (`--focus-ring`, `--focus-on-dark` sobre fondos oscuros), superficies y mensajes, en claro y oscuro.
+- Duraciones 160/220 ms; con `prefers-reduced-motion: reduce` las transiciones y animaciones se reducen a ~0.
+
+## Criterios responsive y de accesibilidad aplicados
+
+- Anchos de comprobación: 320, 360, 390, 768, 1024 y 1280 px, en tema claro y oscuro (los bloques recientes) y 360/390/768/1280 en `ui-foundation`.
+- Sin scroll horizontal; contraste de texto ≥ 4,5:1 (3:1 en texto grande y controles) medido sobre fondos efectivos; foco visible ≥ 3:1; objetivos táctiles ≥ 44 px (botones principales 48 px); texto ≥ 12 px.
+- Errores asociados al campo (`aria-invalid`/`aria-describedby`), regiones `role="status"` persistentes sin anuncios duplicados, foco restaurado solo si se perdió, listas semánticas (`ul/li`) y `<time datetime>`.
+- Singular/plural con `unitsLabel()` (`lib/product-presentation.ts`).
+
+## Comandos de prueba
+
+Node ≥ 22 con esbuild 0.28.2 y Playwright 1.64.0 (Chromium, Firefox y WebKit) instalados fuera del proyecto. Cada suite lee su propia variable de herramientas:
+
+| Suite | Variable de herramientas |
+|---|---|
+| Mayoría de `tests/*.browser.mjs` | `SHELVES_TEST_TOOLS` |
+| `ui-foundation.browser.mjs` | `FOUNDATION_TEST_TOOLS` + `FOUNDATION_ARTIFACTS` (carpeta externa) + `FOUNDATION_PHASE` |
+| `stock-action-menu.browser.mjs` | `STOCK_MENU_TEST_TOOLS` |
+| `inventory-search.integration.mjs` | `INVENTORY_SEARCH_TEST_TOOLS` |
+| `product-form.browser.mjs` | `FORM_TEST_TOOLS` (o `SHELVES_TEST_TOOLS`) |
+
+```powershell
+npm test; npm run lint; npx tsc --noEmit
+$env:NEXT_PUBLIC_SUPABASE_URL='http://127.0.0.1:9'; $env:NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY='sb_publishable_fake_local_key'; npm run build
+$env:SHELVES_TEST_TOOLS='<tools>'; node --test tests/cross-engine.browser.mjs        # Chromium, Firefox y WebKit
+$env:FOUNDATION_PHASE='contrast'; node --test tests/ui-foundation.browser.mjs       # PASS esperado
+node tests/helpers/foundation-diff.mjs --before <before.json> --after <after.json> --md informe.md
+```
+Las pruebas usan datos sintéticos y servicios simulados, con el tráfico externo bloqueado; ninguna consulta a Supabase productivo.
+
+## Cobertura real por motor
+
+- **Chromium (Playwright):** todas las suites de navegador.
+- **Firefox y WebKit de escritorio (Playwright):** `stock-action-menu` (menús), `stock-confirmation` (diálogos) y `cross-engine.browser.mjs` (Inicio, Catálogo, Carga rápida, Historial y Exportaciones a 390/1280 px, claro/oscuro: sin errores de página, sin desbordamiento, contraste, foco, controles alcanzables, regiones accesibles y movimiento reducido).
+- **No verificado:** iPhone/Android reales, Safari/Firefox móviles, lector de pantalla, teclado virtual real, zoom del navegador y PostgREST/JWT aislado. WebKit de escritorio **no** equivale a un iPhone real; el humo multi-motor no sustituye un lector de pantalla.
+
+## Estado de las referencias B4 / `ui-foundation`
+
+- Referencia histórica: `before.json` + `before-revision.json` (commit base `bb26182`, grabada antes de UI01), 120 capturas = 14 escenas × 4 anchos × 2 temas (112) + 2 escenas de navegación móvil (`navigation-hover`, `navigation-focus`) × 2 anchos × 2 temas (8). Nunca se regenera ni se sobrescribe. No existen PNG «before» originales.
+- Modo `contrast`: **PASS** (120 capturas, 0 fallos de contraste).
+- Fase histórica `after`: **FAIL**, con 112 capturas que difieren en identidad (enlaces/campos/botones). No se declara PASS ni se modifica la referencia para forzarlo.
+- Conciliación (`tests/helpers/foundation-diff.mjs` + `tests/fixtures/ui-v2-proposed-differences.json`): las 112 capturas (720 cambios de elemento) se explican con **9 reglas propuestas**, cada una con escenas y elementos exactos, bloque y commit responsable: enlace «Saltar al contenido», entrada «Exportaciones» y atajo de exportación (UI04a, `3e2d9ca`); nuevo texto de las tarjetas del catálogo (UI05a, `8f08fa2`); botón «Crear producto» (UI05b-1, `195b9dc`); «0 unidades» en las 18 cajas disponibles (UI03, `9e5d858`). Las reglas son **propuestas**, no una aprobación individual final.
+- Estados operativos de ocupación: comparados por separado en las 120 capturas (la fase histórica aborta antes de comprobarlos cuando falla la identidad): **0 diferencias**.
+
+### Procedimiento de conciliación y aprobación de candidatos V2
+
+1. **Respaldo** de las referencias históricas fuera del repositorio con `SHA256SUMS`, verificado contra los originales.
+2. **Candidato:** ejecutar el runner histórico sin modificarlo con `FOUNDATION_PHASE=after` en una carpeta **nueva** que contenga copias de `before.json`/`before-revision.json`; produce `after.json` y las 120 capturas desde el HEAD actual (termina en FAIL por la identidad histórica; ese resultado se conserva). Se registra la procedencia (HEAD, hash del runner, versiones, comando) y los hashes.
+3. **Reconstrucción del «antes»:** clon local en `bb26182` + copia sin cambios del runner + `FOUNDATION_PHASE=before` en carpeta nueva; se verifica contra el `before.json` original (identidad, estados operativos y geometría idénticos; algunos hashes de PNG difieren por rasterizado).
+4. **Clasificación:** `foundation-diff.mjs` clasifica cada cambio de identidad por captura frente a las reglas propuestas; una diferencia **sin explicar o una diferencia operativa bloquea** el cierre.
+5. **Hoja de contacto** antes/después (390 y 1280 px, claro y oscuro) para revisión humana, idealmente con Wally.
+6. **Promoción:** requiere autorización independiente de Gepeto/Nacho y acta de revisión visual. Hasta entonces el candidato **no** es referencia oficial y no existe la fase `FOUNDATION_PHASE=v2`.
+
+## Riesgos y pendientes antes de producción (no resueltos)
+
+- Auditoría independiente de arquitectura, seguridad, integración y preparación para producción (Opus 5.5 High, coordinada por Gepeto).
+- Integración real aislada PostgREST/JWT y streaming real de Next del dashboard.
+- Fotografías: archivos huérfanos, limpieza solo en memoria y URLs firmadas de una hora.
+- Exportaciones: la fecha del nombre de archivo es UTC (puede adelantarse un día respecto de la hora de Chile) y la instantánea no es transaccional.
+- Límites de error: `app/(workspace)/error.tsx` usa `reset` mientras que Historial y Estantes usan `retry`; revisar el comportamiento esperado.
+- Configuración de branch deploys de Netlify antes de cualquier push.
+- `tests/app-navigation.browser.mjs` contiene una espera fija de 300 ms.
+- Densidad del Historial: 8.894 px con 50 traslados a 390 px (7.302 px antes de UI07) tras UI09a.
+- Verificación en dispositivos reales, lector de pantalla, teclado móvil y zoom.
