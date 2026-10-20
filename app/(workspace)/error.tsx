@@ -18,7 +18,7 @@ export default function WorkspaceError({
       <AlertCircle size={30} aria-hidden="true" />
       <h2>No pudimos cargar el inventario</h2>
       <p>Comprueba tu conexión e inténtalo de nuevo.</p>
-      <button type="button" onClick={reset} className="primary-button">
+      <button type="button" onClick={reset} className="catalog-button primary">
         Reintentar
       </button>
     </div>

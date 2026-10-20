@@ -111,7 +111,7 @@
   display: flex;
   align-items: center;
   gap: 16px;
-  font-size: 11px;
+  font-size: var(--text-help);
   font-weight: 700;
   color: var(--muted);
   white-space: nowrap;
@@ -197,7 +197,7 @@
   border-radius: 8px 0 0 8px;
 }
 .floor-label-small {
-  font-size: 9px;
+  font-size: var(--text-help);
   font-weight: 800;
   letter-spacing: 0.16em;
   color: inherit;
@@ -208,7 +208,7 @@
   margin: 6px 0;
 }
 .floor-label > span:last-child {
-  font-size: 11px;
+  font-size: var(--text-help);
   font-weight: 800;
   white-space: nowrap;
 }
@@ -263,7 +263,8 @@
   white-space: nowrap;
 }
 .compartment-state {
-  font-size: 11px;
+  font-size: var(--text-help);
+  line-height: 1.2;
   font-weight: 800;
   display: inline-flex;
   align-items: center;
@@ -313,7 +314,7 @@
   display: grid;
   gap: 7px;
   color: #526c69;
-  font-size: 11px;
+  font-size: var(--text-help);
   font-weight: 700;
 }
 .top-view-selector select {
@@ -382,7 +383,7 @@
   letter-spacing: 0.01em;
 }
 .top-view-sector span {
-  font-size: 10px;
+  font-size: var(--text-help);
   font-weight: 700;
 }
 .top-view-hub {
@@ -402,7 +403,7 @@
   margin: 14px 0 0;
   text-align: center;
   color: #447a67;
-  font-size: 11px;
+  font-size: var(--text-help);
   font-weight: 700;
 }
 .top-view-instruction {
@@ -573,7 +574,7 @@
   overflow-wrap: anywhere;
 }
 .product-copy span {
-  font-size: 11px;
+  font-size: var(--text-help);
   color: var(--muted);
 }
 .product-quantity {
@@ -588,7 +589,7 @@
   font-size: 16px;
 }
 .product-quantity span {
-  font-size: 10px;
+  font-size: var(--text-help);
   color: var(--muted);
 }
 .sheet-empty {
@@ -633,7 +634,7 @@
     padding: 7px 9px;
   }
   .compartment-state {
-    font-size: 10px;
+    font-size: var(--text-help);
   }
 }
 @media (max-width: 900px) {
@@ -673,7 +674,7 @@
     gap: 7px;
   }
   .tower-summary-item span {
-    font-size: 10px;
+    font-size: var(--text-help);
     line-height: 1.25;
   }
   .tower-summary-item strong {
@@ -688,7 +689,7 @@
     gap: 10px;
   }
   .model-legend {
-    font-size: 10px;
+    font-size: var(--text-help);
   }
   .tower-floor {
     grid-template-columns: 52px minmax(0, 1fr);
@@ -700,10 +701,10 @@
     font-size: 26px;
   }
   .floor-label-small {
-    font-size: 8px;
+    font-size: var(--text-help);
   }
   .floor-label > span:last-child {
-    font-size: 10px;
+    font-size: var(--text-help);
   }
   .floor-grid {
     gap: 5px;
@@ -720,7 +721,7 @@
     font-size: 13px;
   }
   .compartment-state {
-    font-size: 11px;
+    font-size: var(--text-help);
   }
   .compartment-dialog {
     inset: auto 0 0 0;
@@ -763,7 +764,7 @@
     padding: 11px 8px;
   }
   .tower-summary-item span {
-    font-size: 10px;
+    font-size: var(--text-help);
   }
   .tower-summary-item strong {
     font-size: 23px;
@@ -781,7 +782,7 @@
     font-size: 23px;
   }
   .floor-label > span:last-child {
-    font-size: 9px;
+    font-size: var(--text-help);
   }
   .compartment-button {
     padding: 5px 6px;
@@ -790,11 +791,11 @@
     font-size: 12px;
   }
   .compartment-state {
-    font-size: 11px;
+    font-size: var(--text-help);
     gap: 3px;
   }
   .sheet-location {
-    font-size: 11px;
+    font-size: var(--text-help);
   }
   .detail-sheet {
     padding-left: 18px;

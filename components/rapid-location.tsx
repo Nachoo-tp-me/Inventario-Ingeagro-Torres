@@ -9,6 +9,7 @@ import { ProductForm } from "@/components/product-form";
 import { StockOperationDialog } from "@/components/stock-operation";
 import { rapidLocationHref, rememberRapidLocation, type RapidAdjacent, type RapidLocationContent } from "@/lib/rapid-navigation-model";
 import type { Category } from "@/lib/product-catalog";
+import { unitsLabel } from "@/lib/product-presentation";
 import type { PhysicalLocationOption, ProductOption } from "@/lib/stock-model";
 import { parseQuantity, physicalLocationContext } from "@/lib/stock-model";
 import { searchLocationHref } from "@/lib/location-search-model";
@@ -72,7 +73,7 @@ export function RapidLocation({ current, adjacent, products, categories, compart
       const result = await submitStockOperation({ tipo: "entrada", productoId: selected.id,
         destinoId: current.id, cantidad: amount });
       if (!result.ok) { setError(result.message); return; }
-      setNotice(`${selected.nombre}: +${amount.toLocaleString("es-CL")} unidades registradas en ${current.codigo}.`);
+      setNotice(`${selected.nombre}: +${unitsLabel(amount)} ${amount === 1 ? "registrada" : "registradas"} en ${current.codigo}.`);
       setMode("list"); setSelected(null); setQuantity(""); setQuery("");
       router.refresh();
     } catch {
@@ -132,14 +133,14 @@ export function RapidLocation({ current, adjacent, products, categories, compart
     {mode === "quantity" && selected && <section className="rapid-step" aria-label="Registrar cantidad">
       <p className="rapid-step-label">Paso 2 de 2 · Cantidad</p>
       <h2>{selected.nombre}</h2><p>{selected.categoria} · Destino {current.codigo}</p>
-      {registered !== undefined && <p className="rapid-registered" id="rapid-registered">Stock registrado en {current.codigo}: {registered.toLocaleString("es-CL")} unidades</p>}
+      {registered !== undefined && <p className="rapid-registered" id="rapid-registered">Stock registrado en {current.codigo}: {unitsLabel(registered)}</p>}
       <form onSubmit={save} noValidate>
         <div className="catalog-field"><label htmlFor="rapid-quantity">Cantidad</label>
           <div className="rapid-quantity-row">
             <input id="rapid-quantity" type="text" inputMode="numeric" pattern="[0-9]*" value={quantity} onChange={(event) => { setQuantity(event.target.value); setError(""); setQuantityError(""); }} placeholder="Ej. 17" disabled={pending} autoFocus
               aria-invalid={quantityError ? true : undefined}
               aria-describedby={[registered !== undefined && "rapid-registered", "rapid-quantity-unit", quantityError && "rapid-quantity-error"].filter(Boolean).join(" ")} />
-            <span id="rapid-quantity-unit" className="rapid-unit">unidades</span>
+            <span id="rapid-quantity-unit" className="rapid-unit">{parseQuantity(quantity) === 1 ? "unidad" : "unidades"}</span>
           </div>
           {quantityError && <p id="rapid-quantity-error" className="catalog-field-error" role="alert">{quantityError}</p>}
         </div>

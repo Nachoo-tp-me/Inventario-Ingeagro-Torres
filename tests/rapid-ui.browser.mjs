@@ -204,6 +204,18 @@ test('UI06: carga rápida, componentes reales y ProductForm quick real', async t
     assert.equal(await page.locator('#rapid-registered').count(), 0, 'producto nuevo: sin stock registrado'); await page.close();
   });
 
+  await t.test('singular y plural de unidades: campo, aviso y stock registrado (V14)', async () => {
+    f = createShelfFixture(); const page = await open('/carga/ubicacion/74');
+    await pick(page, 'esp32', /ESP32-S3/); const quantity = page.getByLabel('Cantidad', { exact: true }); const unit = page.locator('#rapid-quantity-unit');
+    assert.equal(flat(await unit.innerText()), 'unidades'); await quantity.fill('1'); assert.equal(flat(await unit.innerText()), 'unidad'); await quantity.fill('2'); assert.equal(flat(await unit.innerText()), 'unidades');
+    await quantity.fill('1'); await submitText(page).click();
+    await page.getByRole('status').filter({ hasText: 'ESP32-S3: +1 unidad registrada en A2.' }).waitFor();
+    await pick(page, 'esp32', /ESP32-S3/); assert.equal(flat(await page.locator('#rapid-registered').innerText()), 'Stock registrado en A2: 1 unidad');
+    await page.getByLabel('Cantidad', { exact: true }).fill('2'); await submitText(page).click();
+    await page.getByRole('status').filter({ hasText: 'ESP32-S3: +2 unidades registradas en A2.' }).waitFor();
+    assert.equal(f.state.tables.inventario.find(r => r.compartimiento_id === 74 && r.producto_id === secondProductId).cantidad, 3); assert.deepEqual(errorsOf.get(page), []); await page.close();
+  });
+
   await t.test('«Ajustar»: nombre accesible, descripción por producto y diálogo UI02 sin regresiones', async () => {
     f = createShelfFixture(); const page = await open('/carga/ubicacion/73');
     const adjust = page.locator('.rapid-product').filter({ hasText: 'Módulo térmico' }).getByRole('button', { name: 'Ajustar', exact: true });

@@ -73,7 +73,7 @@ body:has(.compartment-dialog[open]) .stock-dialog::backdrop { background: #0b272
   background: var(--catalog-soft);
 }
 .stock-fixed-choice > div { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
-.stock-fixed-choice small { color: var(--muted); font-size: 11px; }
+.stock-fixed-choice small { color: var(--muted); font-size: var(--text-help); }
 .stock-fixed-choice strong { overflow-wrap: anywhere; font-size: 14px; }
 .stock-current { justify-content: space-between; flex-wrap: wrap; color: var(--muted); font-size: 13px; }
 .stock-current strong { color: var(--ink); font-size: 16px; }
@@ -91,9 +91,9 @@ body:has(.compartment-dialog[open]) .stock-dialog::backdrop { background: #0b272
 .stock-option-list button.selected { box-shadow: inset 3px 0 var(--green); }
 .stock-option-list button > span { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 .stock-option-list strong { font-size: 13px; overflow-wrap: anywhere; }
-.stock-option-list small { color: var(--muted); font-size: 11px; }
+.stock-option-list small { color: var(--muted); font-size: var(--text-help); }
 .stock-option-list > p { color: var(--muted); font-size: 13px; padding: 12px; margin: 0; }
-.stock-picker-hint { color: var(--muted); font-size: 11px; }
+.stock-picker-hint { color: var(--muted); font-size: var(--text-help); }
 .stock-picked { display: inline-flex; align-items: center; gap: 5px; margin: 0; color: var(--green-text); font-size: 12px; font-weight: 700; overflow-wrap: anywhere; }
 .stock-available, .stock-delta { margin: -7px 0 0; color: var(--muted); font-size: 12px; }
 .stock-delta { display: flex; align-items: center; gap: 6px; color: var(--ink); font-size: var(--text-secondary); font-weight: 750; }
@@ -140,8 +140,8 @@ body:has(.compartment-dialog[open]) .stock-dialog::backdrop { background: #0b272
 .catalog-section-heading > div { min-width: 0; }
 .catalog-section-heading h2 { overflow-wrap: anywhere; }
 /* UI07 · Historial */
-.history-list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-3); }
-.history-card { min-width: 0; display: grid; gap: var(--space-2); padding: var(--space-3) var(--space-4); background: var(--catalog-surface); border: 1px solid var(--line); border-radius: var(--radius-card); }
+.history-list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
+.history-card { min-width: 0; display: grid; gap: calc(var(--space-1) * 1.5); padding: var(--space-3) var(--space-4); background: var(--catalog-surface); border: 1px solid var(--line); border-radius: var(--radius-card); }
 .history-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-1) var(--space-3); }
 .history-type { display: inline-flex; align-items: center; gap: var(--space-2); min-height: 32px; padding: 0 var(--space-3) 0 var(--space-2); border-radius: 999px; background: var(--surface-soft); color: var(--ink); font-size: var(--text-secondary); font-weight: 700; }
 .history-type svg { flex: none; color: var(--green-text); }
@@ -152,6 +152,9 @@ body:has(.compartment-dialog[open]) .stock-dialog::backdrop { background: #0b272
 .history-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .history-places { margin: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: var(--space-1) var(--space-4); }
 .history-places > div { min-width: 0; display: grid; grid-template-columns: 3.25rem minmax(0, 1fr); align-items: center; gap: var(--space-2); }
+.history-places.two > div { grid-template-columns: minmax(0, 1fr); align-items: start; gap: 0; }
+@media (min-width: 360px) { .history-places.two { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 359px) { .history-places.two { grid-template-columns: minmax(0, 1fr); } .history-places.two > div { grid-template-columns: 3.25rem minmax(0, 1fr); align-items: center; gap: var(--space-2); } }
 .history-places dt { color: var(--muted); font-size: var(--text-help); font-weight: 700; }
 .history-places dd { margin: 0; min-width: 0; overflow-wrap: anywhere; line-height: 1.4; }
 .history-code { font-family: var(--font-code); font-weight: 700; }

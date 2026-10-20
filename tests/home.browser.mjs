@@ -313,6 +313,11 @@ test("UI04b: Inicio con resúmenes independientes de Torres y Estantes", async t
     await input.fill("Módulo");
     await page.locator(".search-product-result").first().waitFor();
     assert.equal(await page.locator(".search-product-result").first().getAttribute("href"), `/productos/${productId}`);
+    // V14: singular/plural de unidades en los resultados (1 unidad, no «1 unidades»)
+    active.state.tables.productos.push({ id: "unico", nombre: "Pieza única", categoria_id: "cat01", foto_ruta: null }); active.state.tables.inventario.push({ compartimiento_id: 1, producto_id: "unico", cantidad: 1 });
+    await input.fill("Pieza única"); await page.locator(".search-product-result").first().waitFor();
+    assert.match(await text(page.locator(".search-product-result").first()), /1 unidad · 1 ubicación/); assert.doesNotMatch(await text(page.locator(".search-product-result").first()), /1 unidades/);
+    await input.fill("Módulo"); await page.locator(".search-product-result").first().waitFor();
     await input.fill("B10");
     const place = page.locator(".global-location-result"); await place.waitFor();
     assert.match(await text(place), new RegExp(`Código histórico: B10 · Código actual: ${LONG}`));

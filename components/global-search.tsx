@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ArrowRight, MapPin, Package, Search } from "lucide-react";
 import { searchInventory, type SearchResult } from "@/app/(workspace)/search-actions";
+import { unitsLabel } from "@/lib/product-presentation";
 
 export function GlobalSearch() {
   const [query, setQuery] = useState("");
@@ -53,7 +54,7 @@ export function GlobalSearch() {
             // eslint-disable-next-line @next/next/no-img-element
             <img src={item.fotoUrl} alt="" loading="lazy" />
           ) : <Package size={24} aria-hidden="true" />}</span>
-          <span className="search-result-copy"><strong>{item.nombre}</strong><small>{item.categoria} · {item.stock} unidades · {item.ubicaciones} {item.ubicaciones === 1 ? "ubicación" : "ubicaciones"}</small>
+          <span className="search-result-copy"><strong>{item.nombre}</strong><small>{item.categoria} · {unitsLabel(item.stock)} · {item.ubicaciones} {item.ubicaciones === 1 ? "ubicación" : "ubicaciones"}</small>
             {item.principales.length > 0 && <small>{item.principales.map((place) => `${place.codigo} — ${place.cantidad}`).join(" · ")}</small>}</span>
           <ArrowRight size={18} aria-hidden="true" />
         </Link>)}</div>}

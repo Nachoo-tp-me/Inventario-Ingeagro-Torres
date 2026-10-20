@@ -81,12 +81,12 @@ a {
 }
 .brand-copy small,
 .login-brand small {
-  font-size: 9px;
+  font-size: var(--text-help);
   letter-spacing: 0.29em;
   color: #a9bfbc;
 }
 .side-caption {
-  font-size: 10px;
+  font-size: var(--text-help);
   font-weight: 700;
   letter-spacing: 0.16em;
   color: #8ea9a6;
@@ -273,7 +273,7 @@ a {
 .eyebrow {
   margin: 0 0 10px;
   color: var(--green-text);
-  font-size: 11px;
+  font-size: var(--text-help);
   font-weight: 800;
   letter-spacing: 0.17em;
 }
@@ -311,7 +311,7 @@ a {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  font-size: 10px;
+  font-size: var(--text-help);
   letter-spacing: 0.14em;
   font-weight: 800;
   color: #9cdfc3;
@@ -393,7 +393,7 @@ a {
   outline-offset: 3px;
 }
 .search-coming {
-  font-size: 11px;
+  font-size: var(--text-help);
   font-weight: 700;
   color: #78918a;
   background: #f0f5f3;
@@ -451,7 +451,7 @@ a {
 }
 .metric-card small {
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--text-help);
 }
 .tower-section {
   display: grid;
@@ -531,7 +531,7 @@ a {
 .tower-kicker {
   display: block;
   color: var(--muted);
-  font-size: 10px;
+  font-size: var(--text-help);
   letter-spacing: 0.15em;
   font-weight: 800;
 }
@@ -776,7 +776,7 @@ a {
   max-width: 445px;
 }
 .login-side-footer {
-  font-size: 10px;
+  font-size: var(--text-help);
   color: #9dbbb5;
   letter-spacing: 0.19em;
   font-weight: 700;
@@ -1118,14 +1118,14 @@ a {
     padding: 15px 13px;
   }
   .metric-top {
-    font-size: 11px;
+    font-size: var(--text-help);
   }
   .metric-icon {
     width: 28px;
     height: 28px;
   }
   .metric-card small {
-    font-size: 10px;
+    font-size: var(--text-help);
   }
   .detail-heading h1 {
     font-size: 35px;

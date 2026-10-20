@@ -49,9 +49,9 @@ export function MovementHistory({ entries }: { entries: HistoryEntry[] }) {
       </div>
       <div className="history-main">
         <strong className="history-product">{entry.producto}</strong>
-        <span className="history-quantity">{signedQuantity(entry)}<span className="history-sr"> unidades</span></span>
+        <span className="history-quantity">{signedQuantity(entry)}<span className="history-sr">{entry.cantidad === 1 ? " unidad" : " unidades"}</span></span>
       </div>
-      <dl className="history-places">{places(entry)}</dl>
+      <dl className={entry.tipo === "traslado" ? "history-places two" : "history-places"}>{places(entry)}</dl>
     </li>;
   })}</ul>;
 }

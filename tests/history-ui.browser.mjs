@@ -73,7 +73,7 @@ test('UI07: historial, campos separados, códigos históricos y enlaces por ID',
   }
   const card = (page, id) => page.locator(`[data-movement-id="${id}"]`);
   const fields = (page, id) => card(page, id).locator('.history-places > div').evaluateAll(rows => rows.map(row => ({ label: row.querySelector('dt').textContent, code: row.querySelector('.history-code')?.textContent ?? null, note: row.querySelector('.history-note')?.textContent ?? null, href: row.querySelector('a')?.getAttribute('href') ?? null, name: (row.querySelector('a') ?? row.querySelector('dd')).textContent.trim() })));
-  const summary = async (page, id) => ({ type: await card(page, id).locator('.history-type').textContent(), product: await card(page, id).locator('.history-product').textContent(), quantity: flat(await card(page, id).locator('.history-quantity').textContent()).replace(' unidades', ''), time: await card(page, id).locator('time').getAttribute('datetime') });
+  const summary = async (page, id) => ({ type: await card(page, id).locator('.history-type').textContent(), product: await card(page, id).locator('.history-product').textContent(), quantity: flat(await card(page, id).locator('.history-quantity').textContent()).replace(/ unidad(es)?$/, ''), time: await card(page, id).locator('time').getAttribute('datetime') });
   const measure = async (page, ids) => page.evaluate(ids => { const out = { doc: document.documentElement.scrollHeight, cards: {} }; for (const id of ids) out.cards[id] = Math.round(document.querySelector(`[data-movement-id="${id}"]`).getBoundingClientRect().height); return out; }, ids);
 
   if (!baseline) {
@@ -85,14 +85,16 @@ test('UI07: historial, campos separados, códigos históricos y enlaces por ID',
       const T = (type, product, quantity) => ({ type, product, quantity, time: '2026-01-02T12:30:00.000Z' });
       // Cuatro sentidos: torre→torre (1), torre→caja (2), caja→torre (3), caja→caja (4)
       assert.deepEqual(await summary(page, 1), T('Traslado', 'Módulo térmico', '1'));
+      assert.equal(flat(await card(page, 1).locator('.history-quantity').innerText()), '1 unidad', 'singular accesible: «1 unidad»');
+      assert.equal(flat(await card(page, 2).locator('.history-quantity').innerText()), '2 unidades', 'plural: «2 unidades»');
       assert.deepEqual(await fields(page, 1), [{ label: 'Desde', code: 'C111', note: null, href: '/torres/C1?compartimiento=C111', name: 'C111' }, { label: 'Hacia', code: 'C211', note: null, href: '/torres/C2?compartimiento=C211', name: 'C211' }]);
       assert.deepEqual((await fields(page, 2)).map(x => [x.label, x.code, x.href]), [['Desde', 'C111', '/torres/C1?compartimiento=C111'], ['Hacia', 'A1', '/estantes/1?caja=73']]);
       assert.deepEqual((await fields(page, 3)).map(x => [x.label, x.code, x.href]), [['Desde', 'A1', '/estantes/1?caja=73'], ['Hacia', 'C211', '/torres/C2?compartimiento=C211']]);
       assert.deepEqual((await fields(page, 4)).map(x => [x.label, x.code, x.href]), [['Desde', 'A1', '/estantes/1?caja=73'], ['Hacia', 'B12', '/estantes/6?caja=96']]);
       // Entrada, retiro y ajustes: etiqueta, signo exacto y unidad accesible
       for (const [id, type, quantity, label] of [[5, 'Entrada', '+5', 'Hacia'], [6, 'Retiro', '−6', 'Desde'], [7, 'Ajuste', '+7', 'En'], [8, 'Ajuste', '−8', 'En'], [10, 'Entrada', '+10', 'Hacia'], [11, 'Retiro', '−11', 'Desde'], [12, 'Ajuste', '+12', 'En'], [13, 'Ajuste', '−13', 'En']]) {
-        const s = await summary(page, id); assert.deepEqual([s.type, s.quantity.replace(' unidades', '')], [type, quantity], `movimiento ${id}`);
-        assert.deepEqual((await fields(page, id)).map(x => x.label), [label]); assert.match(await card(page, id).locator('.history-quantity').innerText(), /unidades$/);
+        const s = await summary(page, id); assert.deepEqual([s.type, s.quantity], [type, quantity], `movimiento ${id}`);
+        assert.deepEqual((await fields(page, id)).map(x => x.label), [label]); assert.match(await card(page, id).locator('.history-quantity').innerText(), /unidades$/, `plural ${id}`);
       }
       assert.equal(await card(page, 8).locator('.history-type').evaluate(el => el.classList.contains('ajuste-negative')), true);
       assert.equal(await card(page, 7).locator('.history-type').evaluate(el => el.classList.contains('ajuste-negative')), false);
@@ -171,7 +173,7 @@ test('UI07: historial, campos separados, códigos históricos y enlaces por ID',
       const o = await page.evaluate(() => ({ doc: document.documentElement.scrollWidth - innerWidth })); assert.ok(o.doc <= 0, 'sin scroll horizontal');
       if ([320, 390, 768, 1280].includes(width)) await page.screenshot({ path: path.join(directory, `historial-${width}-${theme}.png`), fullPage: false });
       const pos = await card(page, 2).locator('.history-places > div').evaluateAll(rows => rows.map(r => { const b = r.getBoundingClientRect(); return { top: Math.round(b.top), left: Math.round(b.left) }; }));
-      if (width >= 768) assert.ok(pos[0].top === pos[1].top && pos[1].left > pos[0].left, 'traslado en dos columnas con espacio'); else assert.ok(pos[1].top > pos[0].top && pos[0].left === pos[1].left, 'traslado apilado en móvil');
+      if (width >= 360) assert.ok(pos[0].top === pos[1].top && pos[1].left > pos[0].left, 'traslado en dos columnas desde 360 px'); else assert.ok(pos[1].top > pos[0].top && pos[0].left === pos[1].left, 'traslado apilado a 320 px');
       const pairs = await page.evaluate(() => {
         const rgb = s => s.match(/[\d.]+/g).map(Number); const bg = el => { for (let n = el; n; n = n.parentElement) { const v = rgb(getComputedStyle(n).backgroundColor); if (v.length < 4 || v[3] > 0.99) return v; } return [255, 255, 255]; };
         return [...document.querySelectorAll('.history-type, .history-date, .history-product, .history-quantity, .history-places dt, .history-code, .history-note, .history-page, .history-location-link')].filter(el => el.getClientRects().length && el.textContent.trim()).map(el => ({ n: el.className, fg: rgb(getComputedStyle(el).color), bg: bg(el), size: parseFloat(getComputedStyle(el).fontSize) }));

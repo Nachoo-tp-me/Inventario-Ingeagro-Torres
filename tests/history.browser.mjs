@@ -83,7 +83,7 @@ test('Historial real: ubicaciones, instantáneas, enlaces, paginación y errores
     const card=id=>page.locator('[data-movement-id="'+id+'"]');
     // UI07: campos separados (Desde/Hacia/En) en lugar de una frase con flechas; mismos hechos verificados.
     const fields=id=>card(id).locator('.history-places > div').evaluateAll(rows=>rows.map(row=>({label:row.querySelector('dt').textContent,code:row.querySelector('.history-code')?.textContent??null,note:row.querySelector('.history-note')?.textContent??null,href:row.querySelector('a')?.getAttribute('href')??null,name:(row.querySelector('a')??row.querySelector('dd')).textContent.trim()})));
-    const summary=async id=>({type:await card(id).locator('.history-type').textContent(),product:await card(id).locator('.history-product').textContent(),quantity:(await card(id).locator('.history-quantity').textContent()).replace(' unidades','')});
+    const summary=async id=>({type:await card(id).locator('.history-type').textContent(),product:await card(id).locator('.history-product').textContent(),quantity:(await card(id).locator('.history-quantity').textContent()).replace(/ unidad(es)?$/,'')});
     assert.deepEqual(await summary(2),{type:'Traslado',product:'Módulo térmico',quantity:'2'});
     assert.deepEqual(await fields(2),[{label:'Desde',code:'C111',note:null,href:'/torres/C1?compartimiento=C111',name:'C111'},{label:'Hacia',code:'A1',note:'(actualmente Z20)',href:'/estantes/1?caja=73',name:'A1 (actualmente Z20)'}]);
     assert.equal((await card(2).innerText()).includes('→'),false,'sin flechas decorativas');

@@ -117,10 +117,10 @@
 .similar-warning > p { margin: 5px 0 12px; font-size: 13px; }
 .similar-candidate { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 0; border-top: 1px solid currentColor; }
 .similar-candidate > span { display: grid; gap: 3px; min-width: 0; }
-.similar-candidate small { font-size: 11px; }
+.similar-candidate small { font-size: var(--text-help); }
 @media (max-width: 680px) {
   .rapid-start-form, .rapid-step, .rapid-content { padding: var(--space-4); }
-  .rapid-home-link small { font-size: 11px; }
+  .rapid-home-link small { font-size: var(--text-help); }
   .rapid-location-header { padding: var(--space-4); }
   .rapid-step-actions { flex-direction: column-reverse; align-items: stretch; }
 }
