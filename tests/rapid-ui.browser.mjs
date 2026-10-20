@@ -71,7 +71,7 @@ test('UI06: carga rápida, componentes reales y ProductForm quick real', async t
         else { page = url.pathname.startsWith('/carga/ubicacion/') ? await f.rapidBoxPage({ params: Promise.resolve({ id: url.pathname.split('/')[3] }) }) : await f.rapidTowerPage({ params: Promise.resolve({ codigo: decodeURIComponent(url.pathname.split('/')[2]) }) }); kind = 'location'; }
         res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ path: raw, kind, props: page.props }));
       } else if (target.pathname === '/action' || target.pathname === '/resolve') {
-        const input = await body(); const result = target.pathname === '/action' ? await f.submitStockOperation(input) : await f.resolveRapidCode(input);
+        const input = await body(); if (target.pathname === '/action' && f.state.transportFails) { response.statusCode = 503; response.end('Bad gateway'); return; } const result = target.pathname === '/action' ? await f.submitStockOperation(input) : await f.resolveRapidCode(input);
         if (target.pathname === '/action' && f.state.responseDelay) await new Promise(resolve => setTimeout(resolve, f.state.responseDelay));
         res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify(result));
       } else if (target.pathname === '/product') {
@@ -202,6 +202,16 @@ test('UI06: carga rápida, componentes reales y ProductForm quick real', async t
     page = await open('/carga/ubicacion/73', { init: { existing } }); await fill(); await page.locator('.similar-warning').getByRole('button', { name: 'Crear de todos modos' }).click();
     await page.getByLabel('Cantidad', { exact: true }).waitFor(); assert.equal(f.state.productInserts, 1); assert.equal(f.state.writes.length, 0);
     assert.equal(await page.locator('#rapid-registered').count(), 0, 'producto nuevo: sin stock registrado'); await page.close();
+  });
+
+  await t.test('C1-C: fallo de red en la entrada → «No pudimos confirmar el movimiento…»; errores específicos intactos', async () => {
+    f = createShelfFixture(); const page = await open('/carga/ubicacion/74'); await pick(page, 'esp32', /ESP32-S3/);
+    const quantity = page.getByLabel('Cantidad', { exact: true }); await quantity.fill('2'); f.state.transportFails = true; await submitText(page).click();
+    const alert = page.getByRole('alert'); await alert.waitFor(); assert.equal(flat(await alert.innerText()), 'No pudimos confirmar el movimiento. Revisa el Historial antes de reintentar.');
+    assert.equal(await quantity.inputValue(), '2', 'la cantidad se conserva'); assert.equal(await quantity.getAttribute('aria-invalid'), null, 'no es un error de campo');
+    assert.equal(await submitText(page).isEnabled(), true); assert.equal(f.state.writes.length, 0);
+    f.state.transportFails = false; f.state.entryError = '23514'; await submitText(page).click(); await page.getByRole('alert').filter({ hasText: 'stock suficiente' }).waitFor();
+    assert.doesNotMatch(await page.getByRole('alert').innerText(), /No pudimos confirmar/); assert.deepEqual(errorsOf.get(page), []); await page.close();
   });
 
   await t.test('singular y plural de unidades: campo, aviso y stock registrado (V14)', async () => {

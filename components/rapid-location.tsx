@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, ArrowRight, Check, MapPin, Package, Plus, Search } from "lucide-react";
 import { submitStockOperation } from "@/app/(workspace)/stock-actions";
 import { ProductForm } from "@/components/product-form";
-import { StockOperationDialog } from "@/components/stock-operation";
+import { StockOperationDialog, UNCERTAIN_MOVEMENT_MESSAGE } from "@/components/stock-operation";
 import { rapidLocationHref, rememberRapidLocation, type RapidAdjacent, type RapidLocationContent } from "@/lib/rapid-navigation-model";
 import type { Category } from "@/lib/product-catalog";
 import { unitsLabel } from "@/lib/product-presentation";
@@ -77,7 +77,7 @@ export function RapidLocation({ current, adjacent, products, categories, compart
       setMode("list"); setSelected(null); setQuantity(""); setQuery("");
       router.refresh();
     } catch {
-      setError("No fue posible completar la entrada. Inténtalo nuevamente.");
+      setError(UNCERTAIN_MOVEMENT_MESSAGE);
     } finally { busyRef.current = false; setPending(false); }
   }
 

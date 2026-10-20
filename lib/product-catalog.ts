@@ -1,4 +1,5 @@
 import { requireAuthorizedUser } from "@/lib/auth";
+import { signImagePaths } from "@/lib/storage-errors";
 import { PRODUCT_IMAGE_BUCKET, type Category } from "@/lib/product-validation";
 export type { Category } from "@/lib/product-validation";
 export type Product = {
@@ -41,21 +42,16 @@ export async function getCategories(): Promise<Category[]> {
 
 export async function getSignedProductImages(paths: (string | null)[]) {
   const uniquePaths = [...new Set(paths.filter((path): path is string => !!path))];
-  const urls = new Map<string, string>();
-  if (uniquePaths.length === 0) return urls;
+  if (uniquePaths.length === 0) return new Map<string, string>();
+  // Authentication/authorization failures propagate from here, never degrade.
   const supabase = await requireAuthorizedUser();
-  for (let start = 0; start < uniquePaths.length; start += 100) {
-    const chunk = uniquePaths.slice(start, start + 100);
-    const { data, error } = await supabase.storage
-      .from(PRODUCT_IMAGE_BUCKET)
-      .createSignedUrls(chunk, 3600);
-    if (error) throw error;
-    for (let i = 0; i < chunk.length; i++) {
-      const signed = data?.[i]?.signedUrl;
-      if (signed) urls.set(chunk[i], signed);
-    }
-  }
-  return urls;
+  // A recoverable Storage failure (unreachable, 5xx, timeout, rate limit) only leaves photos unavailable;
+  // access, configuration and programming errors are re-thrown.
+  return signImagePaths(
+    uniquePaths,
+    (chunk) => supabase.storage.from(PRODUCT_IMAGE_BUCKET).createSignedUrls(chunk, 3600),
+    (code) => console.error("No se pudieron firmar fotografías; se muestran como no disponibles.", { code }),
+  );
 }
 
 function productFromRow(row: ProductRow, imageUrls: Map<string, string>): Product {

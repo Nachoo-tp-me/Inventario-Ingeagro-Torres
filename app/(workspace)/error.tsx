@@ -5,10 +5,10 @@ import { AlertCircle } from "lucide-react";
 
 export default function WorkspaceError({
   error,
-  reset,
+  retry,
 }: {
   error: Error & { digest?: string };
-  reset: () => void;
+  retry: () => void;
 }) {
   useEffect(() => {
     console.error("Error al cargar el inventario", error);
@@ -18,7 +18,7 @@ export default function WorkspaceError({
       <AlertCircle size={30} aria-hidden="true" />
       <h2>No pudimos cargar el inventario</h2>
       <p>Comprueba tu conexión e inténtalo de nuevo.</p>
-      <button type="button" onClick={reset} className="catalog-button primary">
+      <button type="button" onClick={retry} className="catalog-button primary">
         Reintentar
       </button>
     </div>

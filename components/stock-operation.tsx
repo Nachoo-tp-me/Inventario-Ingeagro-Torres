@@ -17,6 +17,10 @@ import {
   type StockOperationType,
 } from "@/lib/stock-model";
 
+// Shown when the request to register an entrada/retiro/traslado fails at the transport level: the movement may or may not
+// have been recorded, so the user must check the Historial before retrying (no idempotency key exists yet).
+export const UNCERTAIN_MOVEMENT_MESSAGE = "No pudimos confirmar el movimiento. Revisa el Historial antes de reintentar.";
+
 export type StockOperationStart = {
   tipo: StockOperationType;
   productoId?: string;
@@ -148,7 +152,8 @@ export function StockOperationDialog({
       router.refresh();
     } catch {
       setConfirming(false);
-      setError("No fue posible completar el movimiento. Inténtalo nuevamente.");
+      // The request may have reached the server: a plain retry of an entrada/retiro/traslado could duplicate it.
+      setError(input.tipo === "ajuste" ? "No fue posible completar el movimiento. Inténtalo nuevamente." : UNCERTAIN_MOVEMENT_MESSAGE);
     } finally {
       busyRef.current = false;
       setPending(false);

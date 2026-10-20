@@ -125,3 +125,16 @@ test('contenedores válidos conservan filas y cantidades de torres y cajas',()=>
   assert.equal(data.torres[0].ocupados,1);
   assert.equal(data.estantes[0].ocupados,1);
 });
+
+test("Resumen de Excel: etiquetas coherentes con las cifras (ubicaciones físicas = torres + cajas)", () => {
+  const mixed = buildExportSnapshot(products, [...stock, { producto_id: 'secret-a', compartimiento_id: 73, cantidad: 3 }], [...compartments, ...boxes], towers, snapshot.generadoEn, shelves);
+  const summary = inventoryWorkbookData(mixed)[1].data, value = label => summary.find(row => row[0] === label)?.[1];
+  assert.deepEqual(summary.slice(0, 8), [['Indicador', 'Valor'], ['Productos', 2], ['Unidades totales', 28], ['Compartimientos de torres', 3],
+    ['Ubicaciones ocupadas (torres y cajas)', 3], ['Ubicaciones disponibles (torres y cajas)', 24], ['Ubicaciones totales', 27], ['Cajas de estantes', 24]]);
+  assert.equal(value('Ubicaciones ocupadas (torres y cajas)') + value('Ubicaciones disponibles (torres y cajas)'), value('Ubicaciones totales'), 'ocupadas + disponibles = ubicaciones totales');
+  assert.equal(value('Compartimientos de torres') + value('Cajas de estantes'), value('Ubicaciones totales'), 'torres + cajas = ubicaciones totales');
+  for (const old of ['Compartimientos totales', 'Ocupados', 'Disponibles', 'Cajas totales']) assert.equal(summary.slice(0, 8).some(row => row[0] === old), false, 'sin la etiqueta ambigua «' + old + '»');
+  // Los valores del resumen no cambian respecto del modelo y las filas de inventario tampoco
+  assert.deepEqual(mixed.resumen, { productos: 2, unidades: 28, compartimientos: 3, cajas: 24, ubicaciones: 27, ocupados: 3, disponibles: 24 });
+  assert.equal(inventoryWorkbookData(mixed)[0].data.length, mixed.rows.length + 1);
+});
