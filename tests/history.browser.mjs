@@ -81,11 +81,16 @@ test('Historial real: ubicaciones, instantáneas, enlaces, paginación y errores
     await page.goto(base+'/historial');await page.evaluate(theme=>document.documentElement.dataset.theme=theme,theme);
     const cards=page.locator('.history-card');await cards.nth(12).waitFor();assert.equal(await cards.count(),13);
     const card=id=>page.locator('[data-movement-id="'+id+'"]');
-    assert.match(await card(2).innerText(),/C111 → A1 \(actualmente Z20\)/);
+    // UI07: campos separados (Desde/Hacia/En) en lugar de una frase con flechas; mismos hechos verificados.
+    const fields=id=>card(id).locator('.history-places > div').evaluateAll(rows=>rows.map(row=>({label:row.querySelector('dt').textContent,code:row.querySelector('.history-code')?.textContent??null,note:row.querySelector('.history-note')?.textContent??null,href:row.querySelector('a')?.getAttribute('href')??null,name:(row.querySelector('a')??row.querySelector('dd')).textContent.trim()})));
+    const summary=async id=>({type:await card(id).locator('.history-type').textContent(),product:await card(id).locator('.history-product').textContent(),quantity:(await card(id).locator('.history-quantity').textContent()).replace(' unidades','')});
+    assert.deepEqual(await summary(2),{type:'Traslado',product:'Módulo térmico',quantity:'2'});
+    assert.deepEqual(await fields(2),[{label:'Desde',code:'C111',note:null,href:'/torres/C1?compartimiento=C111',name:'C111'},{label:'Hacia',code:'A1',note:'(actualmente Z20)',href:'/estantes/1?caja=73',name:'A1 (actualmente Z20)'}]);
+    assert.equal((await card(2).innerText()).includes('→'),false,'sin flechas decorativas');
     assert.equal(await card(2).getByRole('link',{name:'A1 (actualmente Z20)',exact:true}).getAttribute('href'),'/estantes/1?caja=73');
     assert.equal(await card(1).getByRole('link',{name:'C211',exact:true}).getAttribute('href'),'/torres/C2?compartimiento=C211');
-    assert.match(await card(3).innerText(),/A1 \(actualmente Z20\) → C211/);
-    assert.match(await card(4).innerText(),/A1 \(actualmente Z20\) → B12/);
+    assert.deepEqual(await fields(3),[{label:'Desde',code:'A1',note:'(actualmente Z20)',href:'/estantes/1?caja=73',name:'A1 (actualmente Z20)'},{label:'Hacia',code:'C211',note:null,href:'/torres/C2?compartimiento=C211',name:'C211'}]);
+    assert.deepEqual(await fields(4),[{label:'Desde',code:'A1',note:'(actualmente Z20)',href:'/estantes/1?caja=73',name:'A1 (actualmente Z20)'},{label:'Hacia',code:'B12',note:null,href:'/estantes/6?caja=96',name:'B12'}]);
     for(const [id,type,sign]of [[5,'Entrada','+5'],[6,'Retiro','−6'],[7,'Ajuste','+7'],[8,'Ajuste','−8'],[10,'Entrada','+10'],[11,'Retiro','−11'],[12,'Ajuste','+12'],[13,'Ajuste','−13']]){
       assert.equal(await card(id).locator('.history-type').textContent(),type);assert.ok((await card(id).innerText()).includes(sign));
     }
@@ -112,7 +117,7 @@ test('Historial real: ubicaciones, instantáneas, enlaces, paginación y errores
     assert.match(await card(2).innerText(),/actualmente W{24}/);
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'Sin overflow con código de 24 caracteres');
     f.state.tables.compartimientos=[];await page.reload();await cards.nth(12).waitFor();
-    assert.match(await card(8).innerText(),/−8.*A1 \(ubicación actual no disponible\)/);
+    assert.equal((await summary(8)).quantity,'−8');assert.deepEqual(await fields(8),[{label:'En',code:'A1',note:'(ubicación actual no disponible)',href:null,name:'A1 (ubicación actual no disponible)'}]);
     assert.equal(await card(8).getByRole('link').count(),0);
     assert.deepEqual(f.state.tables.movimientos,before);assert.equal(f.state.writes.length,0);
     // Paginación de la página real: nunca entrega más de 50 filas al navegador.

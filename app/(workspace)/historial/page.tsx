@@ -24,7 +24,7 @@ export default async function HistoryPage({ searchParams }: {
       ) : <MovementHistory entries={entries} />}
       {(page > 1 || hasNext) && <nav className="history-pagination" aria-label="Páginas de historial">
         {page > 1 ? <Link className="catalog-button" href={page === 2 ? "/historial" : `/historial?pagina=${page - 1}`}>Anterior</Link> : <span />}
-        <span>Página {page}</span>
+        <span className="history-page" aria-current="page">Página {page}</span>
         {hasNext ? <Link className="catalog-button" href={`/historial?pagina=${page + 1}`}>Siguiente</Link> : <span />}
       </nav>}
     </div>

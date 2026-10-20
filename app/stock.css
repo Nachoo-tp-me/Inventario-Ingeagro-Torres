@@ -139,16 +139,29 @@ body:has(.compartment-dialog[open]) .stock-dialog::backdrop { background: #0b272
 .catalog-locations { min-width: 0; }
 .catalog-section-heading > div { min-width: 0; }
 .catalog-section-heading h2 { overflow-wrap: anywhere; }
-.history-list { display: grid; gap: 10px; }
-.history-card { min-width: 0; display: flex; align-items: center; gap: 16px; padding: 16px 19px; background: var(--catalog-surface); border: 1px solid var(--line); border-radius: 12px; }
-.history-icon { width: 39px; height: 39px; flex: none; display: grid; place-items: center; border-radius: 10px; background: var(--catalog-soft); color: var(--green); }
-.history-copy { min-width: 0; flex: 1; }
-.history-copy strong { font-size: 14px; overflow-wrap: anywhere; }
-.history-copy p { margin: 5px 0 0; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
-.history-date { color: var(--muted); font-size: 12px; flex: none; text-align: right; }
-.history-type { font-size: 10px; letter-spacing: .09em; font-weight: 800; color: var(--muted); text-transform: uppercase; }
-.history-pagination { display: flex; justify-content: space-between; gap: 15px; align-items: center; }
-.history-pagination span { color: var(--muted); font-size: 13px; }
+/* UI07 · Historial */
+.history-list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-3); }
+.history-card { min-width: 0; display: grid; gap: var(--space-2); padding: var(--space-3) var(--space-4); background: var(--catalog-surface); border: 1px solid var(--line); border-radius: var(--radius-card); }
+.history-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-1) var(--space-3); }
+.history-type { display: inline-flex; align-items: center; gap: var(--space-2); min-height: 32px; padding: 0 var(--space-3) 0 var(--space-2); border-radius: 999px; background: var(--surface-soft); color: var(--ink); font-size: var(--text-secondary); font-weight: 700; }
+.history-type svg { flex: none; color: var(--green-text); }
+.history-date { color: var(--muted); font-size: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.history-main { min-width: 0; display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); }
+.history-product { min-width: 0; font-size: var(--text-body); line-height: 1.35; overflow-wrap: anywhere; }
+.history-quantity { flex: none; padding: 2px var(--space-3); border-radius: var(--radius-control); background: var(--surface-soft); color: var(--ink); font-size: 18px; font-weight: 750; font-variant-numeric: tabular-nums; }
+.history-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.history-places { margin: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: var(--space-1) var(--space-4); }
+.history-places > div { min-width: 0; display: grid; grid-template-columns: 3.25rem minmax(0, 1fr); align-items: center; gap: var(--space-2); }
+.history-places dt { color: var(--muted); font-size: var(--text-help); font-weight: 700; }
+.history-places dd { margin: 0; min-width: 0; overflow-wrap: anywhere; line-height: 1.4; }
+.history-code { font-family: var(--font-code); font-weight: 700; }
+.history-note { color: var(--muted); font-size: var(--text-secondary); font-weight: 400; }
+.history-places .history-location-link { display: inline-block; min-height: 44px; padding-block: 10px; white-space: normal; font-size: inherit; }
+.history-pagination { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: var(--space-3); }
+.history-pagination > :first-child { justify-self: start; }
+.history-pagination > :last-child { justify-self: end; }
+.history-pagination .catalog-button { min-width: 120px; }
+.history-page { color: var(--muted); font-size: var(--text-secondary); font-weight: 650; text-align: center; }
 /* Same breakpoint as the detail sheet (tower-view.css, 760px) so a nested operation never sits as a centered modal over a bottom sheet. */
 @media (max-width: 760px) {
   .stock-dialog { inset: auto 0 0 0; margin: 0; width: 100%; max-width: none; max-height: 87dvh; border-radius: var(--radius-dialog) var(--radius-dialog) 0 0; }
@@ -159,8 +172,6 @@ body:has(.compartment-dialog[open]) .stock-dialog::backdrop { background: #0b272
 @media (max-width: 680px) {
   .catalog-section-heading { flex-direction: column; align-items: stretch; }
   .catalog-section-heading .catalog-button { width: 100%; }
-  .history-card { align-items: start; flex-wrap: wrap; gap: 10px; padding: 15px; }
-  .history-date { width: 100%; text-align: left; padding-left: 49px; }
 }
 @media (max-width: 380px) {
   .stock-location-main { flex-wrap: wrap; }
@@ -169,9 +180,10 @@ body:has(.compartment-dialog[open]) .stock-dialog::backdrop { background: #0b272
   .sheet-product .stock-action-menu { width: 100%; }
   .sheet-product .stock-action-trigger { width: 100%; }
 }
-.history-copy .history-location-link {
-  display: inline;
-  white-space: normal;
-  min-height: 0;
-  font-size: inherit;
+
+@media (max-width: 480px) {
+  .history-pagination { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .history-pagination .history-page { grid-column: 1 / -1; order: -1; }
+  .history-pagination > :first-child, .history-pagination > :last-child { justify-self: stretch; }
+  .history-pagination .catalog-button { min-width: 0; width: 100%; }
 }

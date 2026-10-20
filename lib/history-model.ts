@@ -32,3 +32,15 @@ export function historyLocationLabel(location: HistoryLocation): string {
   return location.codigoMovimiento === current ? location.codigoMovimiento
     : `${location.codigoMovimiento} (actualmente ${current})`;
 }
+
+// Presentation parts of historyLocationLabel: `note` is the secondary text shown between parentheses.
+// Invariant: label === (note ? `${code} (${note})` : code).
+export function historyLocationParts(location: HistoryLocation): { code: string; note: string | null } {
+  const current = location.ubicacionActual?.codigo;
+  if (location.codigoMovimiento === null) return current
+    ? { code: current, note: "código actual; sin instantánea histórica" }
+    : { code: "Ubicación no disponible", note: "sin instantánea histórica" };
+  if (!current) return { code: location.codigoMovimiento, note: "ubicación actual no disponible" };
+  return location.codigoMovimiento === current ? { code: location.codigoMovimiento, note: null }
+    : { code: location.codigoMovimiento, note: `actualmente ${current}` };
+}
