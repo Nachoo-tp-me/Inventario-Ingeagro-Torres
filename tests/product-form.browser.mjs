@@ -1,4 +1,4 @@
-// UI05b-1: formularios de producto (crear, editar y modo quick de Carga rápida). Componente ProductForm y
+// UI05b-1/UI05b-2: formularios de producto (crear, editar y modo quick de Carga rápida). Componente ProductForm y
 // páginas reales (nuevo / editar) con AppShell; el cliente de Supabase es un doble en memoria que registra cada
 // llamada (productos, categorias y storage) y puede fallar a demanda. Sin Supabase, sin JWT, sin red externa.
 // Aditivo e independiente de B4: invariantes funcionales y geométricas, sin snapshots ni baselines.
@@ -65,7 +65,7 @@ const fakes = {
     export function useRouter(){return {replace(){},push(url){window.__pushed=url},refresh(){window.__refreshed=(window.__refreshed||0)+1}}}
     export function notFound(){throw new Error('NEXT_NOT_FOUND')}`,
   catalog: `export async function getCategories(){return window.__categories}
-    export async function getProduct(){return {product:${JSON.stringify(PRODUCT)},locations:[]}}`,
+    export async function getProduct(){const product=${JSON.stringify(PRODUCT)};if(window.__mode.photo==='nourl')product.fotoUrl=null;if(window.__mode.photo==='bad')product.fotoUrl='/img/missing.png';return {product,locations:[]}}`,
   supabase: `const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
     function builder(table) {
       const s = { table, op: 'select', filters: [] };
@@ -122,9 +122,10 @@ test("UI05b-1: formularios de producto (crear, editar y quick)", async t => {
   const server = createServer((request, response) => {
     const url = new URL(request.url, "http://fixture.test");
     if (url.pathname === "/fixture.js") { response.setHeader("Content-Type", "application/javascript"); response.end(script); }
+    else if (url.pathname.startsWith("/img/") && url.pathname !== "/img/ok.svg") { response.statusCode = 404; response.end("missing"); }
     else if (url.pathname === "/img/ok.svg") { response.setHeader("Content-Type", "image/svg+xml"); response.end('<svg xmlns="http://www.w3.org/2000/svg" width="160" height="120"><rect width="160" height="120" fill="#7aa89b"/><circle cx="80" cy="60" r="30" fill="#fff"/></svg>'); }
     else { response.setHeader("Content-Type", "text/html; charset=utf-8");
-      response.end(`<!doctype html><html lang="es"><meta name="viewport" content="width=device-width,initial-scale=1"><style>${css}</style><div id="root"></div><script>window.__calls=[];window.__mode={};window.__existing=[];window.__categories=${JSON.stringify(CATEGORIES)};</script><script src="/fixture.js"></script></html>`); }
+      response.end(`<!doctype html><html lang="es"><meta name="viewport" content="width=device-width,initial-scale=1"><style>${css}</style><div id="root"></div><script>window.__calls=[];window.__mode=Object.assign({},(window.__init||{}).mode);window.__existing=(window.__init||{}).existing||[];window.__categories=${JSON.stringify(CATEGORIES)};</script><script src="/fixture.js"></script></html>`); }
   });
   await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
   t.after(() => new Promise(resolve => server.close(resolve)));
@@ -141,7 +142,6 @@ test("UI05b-1: formularios de producto (crear, editar y quick)", async t => {
       window.__init = { mode, existing };
     }, [theme, mode, existing]);
     await page.goto(url + route);
-    await page.evaluate(() => { Object.assign(window.__mode, window.__init.mode); window.__existing = window.__init.existing; });
     await page.locator("[data-ready] form.catalog-form").waitFor();
     await page.waitForTimeout(250);
     return page;
@@ -155,7 +155,8 @@ test("UI05b-1: formularios de producto (crear, editar y quick)", async t => {
     const page = await open("/productos/nuevo");
     assert.equal(await text(page.locator("h1")), "Crear producto");
     assert.equal(await text(page.locator(".eyebrow").first()), "CATÁLOGO / NUEVO");
-    assert.match(await text(page.locator(".catalog-form-note")), /crea el producto en el catálogo.*«Agregar stock»/);
+    assert.match(await text(page.locator(".catalog-form-note")), /descripción y la foto se pueden completar después.*«Agregar stock»/);
+    assert.equal(await page.locator(".catalog-form-section").first().locator("> p").count(), 1, "un solo párrafo de ayuda");
     assert.equal(await page.locator(".catalog-form-aside, .catalog-aside-icon").count(), 0);
     assert.deepEqual(await page.locator("form.catalog-form .catalog-form-section > h2").allTextContents(), ["Datos del producto", "Descripción", "Fotografía"]);
     assert.equal(await page.locator("form.catalog-form details").count(), 0, "la fotografía ya no está escondida en «Más detalles»");
@@ -252,7 +253,7 @@ test("UI05b-1: formularios de producto (crear, editar y quick)", async t => {
   await t.test("editar: estructura, textos, valores prellenados y envío con control optimista", async () => {
     let page = await open("/productos/p-1/editar");
     assert.equal(await text(page.locator("h1")), "Editar producto"); assert.equal(await text(page.locator(".eyebrow").first()), "CATÁLOGO / EDITAR");
-    assert.match(await text(page.locator(".catalog-form-note")), /Aquí editas los datos del producto.*«Agregar stock»/);
+    assert.match(await text(page.locator(".catalog-form-note")), /Aquí editas los datos del producto; para cambiar sus existencias.*«Agregar stock»/);
     assert.equal(await text(page.locator("form.catalog-form button[type=submit].primary")), "Guardar cambios");
     assert.equal(await page.locator("#product-name").inputValue(), "Módulo térmico"); assert.equal(await page.locator("#product-category").inputValue(), "cat-1");
     assert.equal(await page.locator("#product-description").inputValue(), "Módulo de control y protección térmica.");
@@ -312,6 +313,150 @@ test("UI05b-1: formularios de producto (crear, editar y quick)", async t => {
     assert.deepEqual(page.errors, []); await page.close();
   });
 
+  // ── UI05b-2: errores asociados a cada campo ──
+  const outline = (page, selector) => page.locator(selector).evaluate(element => { const style = getComputedStyle(element); return { style: style.outlineStyle, width: parseFloat(style.outlineWidth) }; });
+  await t.test("errores de validación: texto exacto, asociado al campo, aria y foco; valores conservados; sin escrituras", async () => {
+    const page = await open("/productos/nuevo"); const submit = page.locator("form.catalog-form button[type=submit]");
+    const expectError = async (field, id, message) => {
+      assert.equal(await text(page.locator("#" + id + "-error")), message, id);
+      assert.equal(await page.locator("#" + id).getAttribute("aria-invalid"), "true");
+      assert.equal(await page.locator("#" + id).getAttribute("aria-describedby"), id + "-error");
+      await page.waitForFunction(expected => document.activeElement?.id === expected, id); // el foco va al campo inválido (tras la nueva renderización del input de archivo)
+      assert.equal(await page.getByRole("alert").count(), 1, "una sola alerta (la del campo)");
+      assert.equal(await page.locator(".catalog-form-split > .catalog-message.error").count(), 0);
+      const ring = await outline(page, field === "foto" ? ".catalog-file-button" : "#" + id); assert.ok(ring.style === "solid" && ring.width >= 3, `foco visible en #${id}: ${JSON.stringify(ring)}`); // el <input type=file> es invisible: el anillo va en su botón
+    };
+    await page.locator("#product-category").selectOption("cat-2"); await submit.click();
+    await expectError("nombre", "product-name", "Escribe un nombre para el producto.");
+    assert.equal(await page.locator("#product-category").inputValue(), "cat-2", "los valores se conservan");
+    await page.locator("#product-name").fill("---"); await submit.click();
+    await expectError("nombre", "product-name", "El nombre debe incluir al menos una letra o un número.");
+    await page.locator("#product-name").fill("Producto válido"); await page.locator("#product-category").selectOption(""); await submit.click();
+    await expectError("categoria", "product-category", "Selecciona una categoría válida.");
+    assert.equal(await page.locator("#product-name").inputValue(), "Producto válido");
+    assert.equal(await page.locator("#product-name").getAttribute("aria-invalid"), null, "los demás campos no quedan marcados");
+    // Varios errores a la vez: se informa el primero (el mismo de validateProduct) y el foco va a él.
+    await page.locator("#product-name").fill(""); await submit.click();
+    await expectError("nombre", "product-name", "Escribe un nombre para el producto.");
+    // Archivo inválido: mensaje junto a la fotografía, foco en el control de archivo.
+    await page.locator("#product-name").fill("Producto válido"); await page.locator("#product-category").selectOption("cat-1");
+    await page.locator("#product-photo").setInputFiles({ name: "malo.gif", mimeType: "image/gif", buffer: PNG });
+    await expectError("foto", "product-photo", "Elige una imagen JPG, PNG o WebP.");
+    assert.equal(await page.locator("#product-name").getAttribute("aria-invalid"), null);
+    assert.deepEqual(await calls(page), [], "ninguna llamada con datos inválidos");
+    // Corregido, guarda y se limpian las marcas.
+    await page.locator("form.catalog-form button[type=submit]").click().catch(() => {}); await page.waitForFunction(() => window.__pushed);
+    assert.equal(writes(await calls(page)).filter(call => call.op === "insert").length, 1);
+    assert.deepEqual(page.errors, []); await page.close();
+  });
+
+  await t.test("quick: el error de nombre se asocia al campo; el de la foto (en <details> cerrado) queda en el área general", async () => {
+    const page = await open("/quick");
+    await page.locator("form.catalog-form button[type=submit]").click();
+    assert.equal(await text(page.locator("#product-name-error")), "Escribe un nombre para el producto.");
+    assert.equal(await page.evaluate(() => document.activeElement?.id), "product-name");
+    await fillValid(page, "Producto rápido");
+    await page.locator("#product-photo").setInputFiles({ name: "malo.gif", mimeType: "image/gif", buffer: PNG });
+    assert.equal(await page.locator("#product-photo-error").count(), 0, "sin error inline para un campo oculto");
+    assert.equal(await text(page.locator("form.catalog-form > .catalog-message.error")), "Elige una imagen JPG, PNG o WebP.");
+    assert.equal(await page.locator("form.catalog-form details").evaluate(element => element.open), false, "el <details> no se abre solo");
+    assert.deepEqual(writes(await calls(page)), []); await page.close();
+  });
+
+  // ── UI05b-2: estado de guardado accesible ──
+  await t.test("estado de guardado: región role=status con la etapa actual; sin porcentajes", async () => {
+    const page = await open("/productos/nuevo", { mode: { delay: 500 } }); await fillValid(page);
+    await page.locator("#product-photo").setInputFiles({ name: "foto.png", mimeType: "image/png", buffer: PNG });
+    const status = page.locator("p.catalog-save-status[role=status]");
+    assert.equal(await status.count(), 1); assert.equal(await status.getAttribute("aria-live"), "polite"); assert.equal(await status.isVisible(), false, "vacía y oculta en reposo");
+    await page.locator("form.catalog-form button[type=submit]").click();
+    const seen = [];
+    let buttonDuring = "";
+    for (let i = 0; i < 40; i++) { const value = (await status.innerText().catch(() => "")).trim(); if (value && !seen.includes(value)) seen.push(value); if (value === "Guardando producto…") buttonDuring = (await page.locator("form.catalog-form button[type=submit]").innerText()).trim(); if (await page.evaluate(() => window.__pushed ?? null)) break; await page.waitForTimeout(100); }
+    assert.ok(seen.includes("Comprobando productos parecidos…") && seen.includes("Subiendo fotografía…") && seen.includes("Guardando producto…"), JSON.stringify(seen));
+    assert.ok(seen.every(value => !/%/.test(value)), "sin porcentajes inventados");
+    assert.equal(buttonDuring, "Guardando producto…", "el botón conserva su texto de etapa");
+    await page.waitForFunction(() => window.__pushed); assert.deepEqual(page.errors, []); await page.close();
+  });
+
+  // ── UI05b-2: fotografía ──
+  await t.test("fotografía guardada sin vista previa: aviso, conservación al guardar y quitar/deshacer sin llamadas", async () => {
+    let page = await open("/productos/p-1/editar", { mode: { photo: "nourl" } });
+    assert.equal(await page.locator(".catalog-photo-preview img").count(), 0);
+    assert.equal(await text(page.locator(".catalog-photo-note")), "Fotografía guardada. Vista previa no disponible");
+    assert.equal(await text(page.locator(".catalog-file-button")), "Reemplazar foto");
+    await page.getByRole("button", { name: "Quitar foto" }).click();
+    assert.equal(await text(page.locator(".catalog-photo-note")), "La fotografía se eliminará cuando guardes. Deshacer");
+    assert.equal(await page.locator(".catalog-photo-note").getAttribute("role"), "status");
+    await page.waitForFunction(() => document.activeElement?.id === "product-photo-undo");
+    await page.getByRole("button", { name: "Deshacer" }).click();
+    assert.equal(await text(page.locator(".catalog-photo-note")), "Fotografía guardada. Vista previa no disponible");
+    await page.waitForFunction(() => document.activeElement?.id === "product-photo-remove");
+    assert.deepEqual(await calls(page), [], "quitar y deshacer no llaman al servidor");
+    await page.locator("form.catalog-form button[type=submit]").click(); await page.waitForFunction(() => window.__pushed);
+    const list = await calls(page); assert.equal(list.find(call => call.op === "update").values.foto_ruta, "p-1/anterior.png");
+    assert.equal(list.some(call => call.kind === "upload" || call.kind === "remove"), false, "conserva la foto: sin subir ni borrar"); await page.close();
+    // Quitar sin vista previa disponible y confirmar al guardar.
+    page = await open("/productos/p-1/editar", { mode: { photo: "nourl" } }); await page.getByRole("button", { name: "Quitar foto" }).click();
+    await page.locator("form.catalog-form button[type=submit]").click(); await page.waitForFunction(() => window.__pushed);
+    const removal = await calls(page); assert.equal(removal.find(call => call.op === "update").values.foto_ruta, null); assert.deepEqual(removal.find(call => call.kind === "remove").paths, ["p-1/anterior.png"]); await page.close();
+  });
+
+  await t.test("fotografía con vista previa: quitar → aviso + deshacer restaura sin llamadas; quitar + guardar elimina", async () => {
+    let page = await open("/productos/p-1/editar");
+    await page.getByRole("button", { name: "Quitar foto" }).click();
+    assert.equal(await page.locator(".catalog-photo-preview img").count(), 0); assert.match(await text(page.locator(".catalog-photo-note")), /^La fotografía se eliminará cuando guardes\./);
+    assert.equal(await text(page.locator(".catalog-file-button")), "Añadir foto");
+    await page.getByRole("button", { name: "Deshacer" }).click();
+    assert.equal(await page.locator(".catalog-photo-preview img").count(), 1); assert.equal(await page.locator(".catalog-photo-note").count(), 0);
+    assert.equal(await text(page.locator(".catalog-file-button")), "Reemplazar foto"); assert.deepEqual(await calls(page), []);
+    await page.locator("form.catalog-form button[type=submit]").click(); await page.waitForFunction(() => window.__pushed);
+    const kept = await calls(page); assert.equal(kept.find(call => call.op === "update").values.foto_ruta, "p-1/anterior.png"); assert.equal(kept.some(call => call.kind === "remove"), false); await page.close();
+    // Crear: «Quitar foto» de una foto recién elegida no muestra el aviso de eliminación (no hay foto guardada).
+    page = await open("/productos/nuevo"); await page.locator("#product-photo").setInputFiles({ name: "foto.png", mimeType: "image/png", buffer: PNG });
+    await page.getByRole("button", { name: "Quitar foto" }).click(); assert.equal(await page.locator(".catalog-photo-note").count(), 0);
+    assert.equal(await text(page.locator(".catalog-file-button")), "Añadir foto"); await page.close();
+    // Sustituir: deshacer tras quitar y elegir otra foto.
+    page = await open("/productos/p-1/editar"); await page.getByRole("button", { name: "Quitar foto" }).click();
+    await page.locator("#product-photo").setInputFiles({ name: "nueva.png", mimeType: "image/png", buffer: PNG });
+    assert.equal(await page.locator(".catalog-photo-note").count(), 0, "elegir otra foto cancela la eliminación pendiente");
+    assert.equal(await text(page.locator(".catalog-file-button")), "Reemplazar foto"); await page.close();
+  });
+
+  await t.test("vista previa que falla o caduca: respaldo legible y la acción de reemplazo sigue disponible", async () => {
+    const page = await open("/productos/p-1/editar", { mode: { photo: "bad" } });
+    await page.waitForFunction(() => document.querySelector(".catalog-photo-preview")?.hasAttribute("data-failed"));
+    assert.equal(await page.locator(".catalog-photo-preview img").evaluate(image => image.hidden), true);
+    assert.equal(await page.locator(".catalog-preview-failed").isVisible(), true);
+    assert.equal(await text(page.locator(".catalog-preview-failed")), "No se pudo cargar la vista previa");
+    assert.equal(await text(page.locator(".catalog-file-button")), "Reemplazar foto"); assert.equal(await page.getByRole("button", { name: "Quitar foto" }).count(), 1);
+    await page.locator("#product-photo").setInputFiles({ name: "nueva.png", mimeType: "image/png", buffer: PNG });
+    assert.equal(await page.locator(".catalog-photo-preview[data-failed]").count(), 0, "la nueva vista previa reinicia el estado");
+    assert.equal(await page.locator(".catalog-photo-preview img").evaluate(image => !image.hidden), true);
+    assert.deepEqual(page.errors, []); await page.close();
+  });
+
+  await t.test("errores de subida y de limpieza: mensajes existentes, campos conservados y secuencia intacta", async () => {
+    let page = await open("/productos/nuevo", { mode: { upload: "error" } }); await fillValid(page);
+    await page.locator("#product-photo").setInputFiles({ name: "foto.png", mimeType: "image/png", buffer: PNG });
+    await page.locator("form.catalog-form button[type=submit]").click();
+    assert.equal(await text(page.getByRole("alert")), "No pudimos subir la fotografía. Comprueba tu conexión e inténtalo de nuevo.");
+    assert.equal(await page.locator(".catalog-field-error").count(), 0, "los errores de servidor no se asocian a un campo");
+    assert.equal(await page.locator("#product-name").inputValue(), "Sensor de proximidad M18"); assert.equal(await page.locator(".catalog-photo-preview img").count(), 1);
+    assert.equal((await calls(page)).some(call => call.kind === "db" && call.op === "insert"), false); await page.close();
+    // Insert falla y la limpieza también: aparece el reintento y el formulario queda bloqueado hasta resolverlo.
+    page = await open("/productos/nuevo", { mode: { insert: "error", remove: "error" } }); await fillValid(page);
+    await page.locator("#product-photo").setInputFiles({ name: "foto.png", mimeType: "image/png", buffer: PNG });
+    await page.locator("form.catalog-form button[type=submit]").click();
+    await page.getByRole("button", { name: "Reintentar eliminación del archivo" }).waitFor();
+    assert.equal(await page.locator("form.catalog-form button[type=submit]").isDisabled(), true);
+    await page.evaluate(() => { window.__mode.remove = undefined; });
+    await page.getByRole("button", { name: "Reintentar eliminación del archivo" }).click();
+    await page.getByText("Archivo temporal eliminado. Puedes guardar de nuevo.").waitFor();
+    assert.equal(await page.locator("form.catalog-form button[type=submit]").isDisabled(), false);
+    assert.equal(await page.locator("#product-name").inputValue(), "Sensor de proximidad M18"); await page.close();
+  });
+
   // ── Responsive, contraste, foco, teclado y movimiento ──
   const paints = (page, selector, fromParent = false) => page.locator(selector).evaluateAll((elements, fromParent) => {
     const canvas = document.createElement("canvas"); canvas.width = canvas.height = 1; const ctx = canvas.getContext("2d", { willReadFrequently: true });
@@ -326,6 +471,14 @@ test("UI05b-1: formularios de producto (crear, editar y quick)", async t => {
         const longName = "Controlador lógico programable modular con módulo de expansión analógica y comunicación industrial redundante serie XL-9000".slice(0, 160);
         await page.locator("#product-name").fill(longName);
         if (route === "/quick") await page.locator("form.catalog-form summary").click();
+        if (route === "/productos/nuevo") { // error asociado al campo: visible, legible y con el foco en el campo
+          await page.locator("#product-name").fill(""); await page.locator("form.catalog-form button[type=submit]").click();
+          const errorBox = await page.locator("#product-name-error").evaluate(element => { const r = element.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, vw: innerWidth, vh: innerHeight }; });
+          assert.ok(errorBox.left >= 0 && errorBox.right <= errorBox.vw && errorBox.top >= 0 && errorBox.bottom <= errorBox.vh, `error visible en la ventana a ${width}px ${JSON.stringify(errorBox)}`);
+          for (const sample of await paints(page, "#product-name-error")) assert.ok(ratio(sample.fg, sample.bg) >= 4.5, `error ${ratio(sample.fg, sample.bg).toFixed(2)}`);
+          assert.equal(await page.evaluate(() => document.activeElement?.id), "product-name");
+          await page.locator("#product-name").fill(longName);
+        }
         await page.locator("#product-description").fill("Descripción larga ".repeat(110));
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, `${route} sin scroll horizontal`);
         const geometry = await page.evaluate(() => ({ vw: innerWidth, items: [...document.querySelectorAll(".catalog-form-section, .catalog-form-actions, .catalog-field input, .catalog-field select, .catalog-field textarea, .catalog-photo-editor, .catalog-form-note")]

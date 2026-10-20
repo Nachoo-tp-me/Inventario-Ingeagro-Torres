@@ -16,6 +16,7 @@ import {
   validateImage,
   validateProduct,
 } from "@/lib/product-validation";
+import { fieldErrorOfProduct, type ProductFieldName } from "@/lib/product-form-model";
 import { similarProducts } from "@/lib/rapid-model";
 
 type ExistingProduct = { id: string; nombre: string; categoria: string; nombre_normalizado?: string };
@@ -25,6 +26,15 @@ const IMAGE_EXTENSIONS: Record<string, string> = {
   "image/png": "png",
   "image/webp": "webp",
 };
+
+type ErrorField = ProductFieldName | "foto";
+const FIELD_IDS: Record<ErrorField, string> = { nombre: "product-name", categoria: "product-category", descripcion: "product-description", foto: "product-photo" };
+
+// A failed preview (expired signed URL, network) is hidden and the fallback text takes its place. Presentation only.
+function markPreviewFailed(image: HTMLImageElement) {
+  image.hidden = true;
+  image.closest<HTMLElement>("[data-photo]")?.setAttribute("data-failed", "true");
+}
 
 export function ProductForm({
   initial,
@@ -61,6 +71,8 @@ export function ProductForm({
   const [cleanupPath, setCleanupPath] = useState<string | null>(null);
   const [savedId, setSavedId] = useState<string | null>(null);
   const [similar, setSimilar] = useState<ExistingProduct[]>([]);
+  const [fieldError, setFieldError] = useState<{ field: ErrorField; message: string } | null>(null);
+  const previewRef = useRef<HTMLImageElement>(null);
 
   useEffect(() => {
     return () => {
@@ -73,6 +85,27 @@ export function ProductForm({
     : removePhoto
       ? null
       : initial?.fotoUrl ?? null;
+
+  // Also catches a preview that already failed before hydration (onError never fired).
+  useEffect(() => {
+    const image = previewRef.current;
+    if (image && image.complete && image.naturalWidth === 0) markPreviewFailed(image);
+  }, [currentPhoto]);
+
+  function focusLater(id: string) {
+    requestAnimationFrame(() => formRef.current?.querySelector<HTMLElement>("#" + id)?.focus());
+  }
+
+  // Associates an existing validation message with its field and moves focus there. In quick mode the description
+  // and the photo live in the closed <details>, so their messages stay in the general area.
+  function showFieldError(message: string, field: ErrorField | null) {
+    setError(message);
+    if (!field || (quick && (field === "descripcion" || field === "foto"))) { setFieldError(null); return; }
+    setFieldError({ field, message });
+    const focus = () => formRef.current?.querySelector<HTMLElement>("#" + FIELD_IDS[field])?.focus();
+    focus();
+    requestAnimationFrame(focus); // the file input is re-created after an invalid file
+  }
 
   async function refreshCategories() {
     const { data, error: fetchError } = await createSupabaseClient()
@@ -145,7 +178,7 @@ export function ProductForm({
     if (!chosen) return;
     const validationError = validateImage(chosen);
     if (validationError) {
-      setError(validationError);
+      showFieldError(validationError, "foto");
       setFileInputKey((key) => key + 1);
       return;
     }
@@ -190,13 +223,13 @@ export function ProductForm({
       descripcion,
     );
     if (validationError) {
-      setError(validationError);
+      showFieldError(validationError, fieldErrorOfProduct(validateProduct, nombre, categoriaId, categories, descripcion)?.field ?? null);
       return;
     }
     if (file) {
       const imageError = validateImage(file);
       if (imageError) {
-        setError(imageError);
+        showFieldError(imageError, "foto");
         return;
       }
     }
@@ -338,7 +371,17 @@ export function ProductForm({
     }
   }
 
+  const inlineField = fieldError && fieldError.message === error ? fieldError.field : null;
+  const globalError = inlineField ? "" : error;
+  const invalidProps = (field: ErrorField) => inlineField === field
+    ? { "aria-invalid": true, "aria-describedby": FIELD_IDS[field] + "-error" } as const
+    : {};
+  const storedUnavailable = !file && !removePhoto && !!initial?.foto_ruta && !initial.fotoUrl;
+  const hasPhoto = !!currentPhoto || storedUnavailable;
+  const pendingRemoval = removePhoto && !!initial?.foto_ruta;
+
   const descriptionField = (
+    <>
       <label className="catalog-field" htmlFor="product-description">
         <span>Descripción <small>Opcional</small></span>
         <textarea
@@ -349,8 +392,11 @@ export function ProductForm({
           rows={5}
           placeholder="Detalles que ayuden a identificarlo"
           disabled={pending || !!savedId}
+          {...invalidProps("descripcion")}
         />
       </label>
+      {inlineField === "descripcion" && <p id="product-description-error" className="catalog-field-error" role="alert">{error}</p>}
+    </>
   );
 
   const photoSection = (
@@ -358,17 +404,19 @@ export function ProductForm({
       <h2>Fotografía</h2>
       <p>JPG, PNG o WebP · hasta 5 MB.</p>
       <div className="catalog-photo-editor">
-        <div className="catalog-photo-preview">
-          {currentPhoto ? (
+        <div className="catalog-photo-preview" data-photo key={currentPhoto ?? "sin-vista-previa"}>
+          <Package className="catalog-preview-icon" size={44} aria-hidden="true" />
+          {currentPhoto && (
             // URL local temporal o firmada del bucket privado.
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={currentPhoto} alt="Vista previa del producto" />
-          ) : <Package size={44} aria-hidden="true" />}
+            <img ref={previewRef} src={currentPhoto} alt="Vista previa del producto" onError={(event) => markPreviewFailed(event.currentTarget)} />
+          )}
+          <span className="catalog-preview-failed">No se pudo cargar la vista previa</span>
         </div>
         <div className="catalog-photo-controls">
           <label className="catalog-file-button" htmlFor="product-photo">
             <ImagePlus size={18} aria-hidden="true" />
-            {currentPhoto ? "Reemplazar foto" : "Añadir foto"}
+            {hasPhoto ? "Reemplazar foto" : "Añadir foto"}
           </label>
           <input
             key={fileInputKey}
@@ -377,14 +425,27 @@ export function ProductForm({
             accept="image/jpeg,image/png,image/webp"
             onChange={(event) => chooseFile(event.target.files?.[0])}
             disabled={pending || !!savedId}
+            {...invalidProps("foto")}
           />
-          {currentPhoto && (
-            <button type="button" className="catalog-quiet-button" disabled={pending || !!savedId} onClick={() => {
+          {inlineField === "foto" && <p id="product-photo-error" className="catalog-field-error" role="alert">{error}</p>}
+          {hasPhoto && (
+            <button type="button" id="product-photo-remove" className="catalog-quiet-button" disabled={pending || !!savedId} onClick={() => {
               setFile(null);
               setPreviewUrl(null);
               setFileInputKey((key) => key + 1);
               setRemovePhoto(true);
+              if (initial?.foto_ruta) focusLater("product-photo-undo");
             }}><Trash2 size={16} aria-hidden="true" /> Quitar foto</button>
+          )}
+          {storedUnavailable && <span className="catalog-photo-note">Fotografía guardada. Vista previa no disponible</span>}
+          {pendingRemoval && (
+            <span className="catalog-photo-note" role="status">
+              La fotografía se eliminará cuando guardes.
+              <button type="button" id="product-photo-undo" className="catalog-quiet-button" disabled={pending || !!savedId} onClick={() => {
+                setRemovePhoto(false);
+                focusLater("product-photo-remove");
+              }}>Deshacer</button>
+            </span>
           )}
           <span>La fotografía es opcional.</span>
         </div>
@@ -397,10 +458,9 @@ export function ProductForm({
       <form ref={formRef} className={quick ? "catalog-form" : "catalog-form catalog-form-split"} onSubmit={save} noValidate>
         <div className="catalog-form-section">
           <h2>Datos del producto</h2>
-          <p>La foto y la descripción se pueden completar después.</p>
-          {!quick && <p className="catalog-form-note">{initial
-            ? "Aquí editas los datos del producto. Para cambiar sus existencias usa «Agregar stock» o «Acciones» en su ficha."
-            : "Esto crea el producto en el catálogo. Sus existencias se agregan después con «Agregar stock» en su ficha."}</p>}
+          {quick ? <p>La foto y la descripción se pueden completar después.</p> : <p className="catalog-form-note">{initial
+            ? "Aquí editas los datos del producto; para cambiar sus existencias usa «Agregar stock» o «Acciones» en su ficha."
+            : "La descripción y la foto se pueden completar después. Las existencias se agregan luego con «Agregar stock» en la ficha del producto."}</p>}
           <label className="catalog-field" htmlFor="product-name">
             <span>Nombre {quick ? <b>*</b> : <small className="catalog-required">Obligatorio</small>}</span>
             <input
@@ -412,8 +472,10 @@ export function ProductForm({
               autoComplete="off"
               required
               disabled={pending || !!savedId}
+              {...invalidProps("nombre")}
             />
           </label>
+          {inlineField === "nombre" && <p id="product-name-error" className="catalog-field-error" role="alert">{error}</p>}
           <label className="catalog-field" htmlFor="product-category">
             <span>Categoría {quick ? <b>*</b> : <small className="catalog-required">Obligatorio</small>}</span>
             <select
@@ -425,6 +487,7 @@ export function ProductForm({
               }}
               required
               disabled={pending || !!savedId}
+              {...invalidProps("categoria")}
             >
               <option value="">Selecciona una categoría</option>
               {categories.map((category) => (
@@ -433,6 +496,7 @@ export function ProductForm({
               <option value="__new__">+ Nueva categoría</option>
             </select>
           </label>
+          {inlineField === "categoria" && <p id="product-category-error" className="catalog-field-error" role="alert">{error}</p>}
           {newCategoryOpen && (
             <div className="category-inline">
               <label className="catalog-field" htmlFor="category-name">
@@ -489,12 +553,13 @@ export function ProductForm({
           }}>Crear de todos modos</button>
         </div>}
 
-        {error && <p className="catalog-message error" role="alert">{error}</p>}
+        {globalError && <p className="catalog-message error" role="alert">{globalError}</p>}
         {notice && <p className="catalog-message success" role="status"><CheckCircle2 size={18} aria-hidden="true" /> {notice}</p>}
         {cleanupPath && (
           <button type="button" className="catalog-button" onClick={retryCleanup} disabled={pending}>Reintentar eliminación del archivo</button>
         )}
         {savedId && <Link className="catalog-quiet-button" href={`/productos/${savedId}?guardado=1`}>Ver producto guardado</Link>}
+        <p className="catalog-save-status" role="status" aria-live="polite">{pending ? stage : ""}</p>
         <div className="catalog-form-actions">
           {onCancel ? <button type="button" onClick={onCancel} className="catalog-quiet-button" disabled={pending}>Cancelar</button> : <Link href={initial ? `/productos/${initial.id}` : "/productos"} className="catalog-quiet-button">Cancelar</Link>}
           <button type="submit" className="catalog-button primary" disabled={pending || !!cleanupPath || !!savedId}>
