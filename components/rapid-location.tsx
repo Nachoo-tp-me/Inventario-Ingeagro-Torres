@@ -14,36 +14,60 @@ import { parseQuantity, physicalLocationContext } from "@/lib/stock-model";
 import { searchLocationHref } from "@/lib/location-search-model";
 import { matchesCatalogQuery } from "@/lib/rapid-model";
 
+const RESULT_LIMIT = 50;
+// Presentation only: the physical code is always shown complete; longer codes get a smaller type size.
+const codeSize = (code: string) => code.length <= 4 ? "short" : code.length <= 8 ? "medium" : "long";
+
 export function RapidLocation({ current, adjacent, products, categories, compartments }: {
   current: RapidLocationContent; adjacent: RapidAdjacent; products: ProductOption[];
   categories: Category[]; compartments: PhysicalLocationOption[];
 }) {
   const router = useRouter();
   const busyRef = useRef(false);
+  const primaryRef = useRef<HTMLButtonElement>(null);
+  const newStepRef = useRef<HTMLHeadingElement>(null);
+  const previousMode = useRef<"list" | "select" | "new" | "quantity" | null>(null);
   const [mode, setMode] = useState<"list" | "select" | "new" | "quantity">("list");
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<ProductOption | null>(null);
   const [quantity, setQuantity] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
+  const [quantityError, setQuantityError] = useState("");
   const [notice, setNotice] = useState("");
   const [adjust, setAdjust] = useState<{ id: string; stock: number } | null>(null);
   useEffect(() => {
     try { rememberRapidLocation(localStorage, { id: current.id, tipo: current.tipo, codigo: current.codigo }); } catch { /* Preferencia local opcional. */ }
   }, [current.id, current.tipo, current.codigo]);
 
-  const filtered = products.filter((item) => matchesCatalogQuery(item.nombre, item.categoria, query)).slice(0, 50);
+  // Keyboard focus follows the step only when the previous control disappeared (focus fell back to <body>), so it
+  // never steals focus from typing or from controls the user is already using.
+  useEffect(() => {
+    const changed = previousMode.current !== null && previousMode.current !== mode;
+    previousMode.current = mode;
+    if (!changed || (document.activeElement && document.activeElement !== document.body)) return;
+    if (mode === "list") primaryRef.current?.focus();
+    else if (mode === "new") newStepRef.current?.focus();
+  }, [mode]);
+
+  const matches = products.filter((item) => matchesCatalogQuery(item.nombre, item.categoria, query));
+  const filtered = matches.slice(0, 50);
+  const registered = selected ? current.productos.find((item) => item.id === selected.id)?.cantidad : undefined;
 
   function choose(product: ProductOption) {
-    setSelected(product); setQuantity(""); setError(""); setMode("quantity");
+    setSelected(product); setQuantity(""); setError(""); setQuantityError(""); setMode("quantity");
   }
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (busyRef.current || !selected) return;
     const amount = parseQuantity(quantity);
-    if (amount === null) { setError("La cantidad debe ser un entero mayor que cero."); return; }
-    busyRef.current = true; setPending(true); setError("");
+    if (amount === null) {
+      setQuantityError("La cantidad debe ser un entero mayor que cero.");
+      document.getElementById("rapid-quantity")?.focus();
+      return;
+    }
+    busyRef.current = true; setPending(true); setError(""); setQuantityError("");
     try {
       const result = await submitStockOperation({ tipo: "entrada", productoId: selected.id,
         destinoId: current.id, cantidad: amount });
@@ -62,13 +86,15 @@ export function RapidLocation({ current, adjacent, products, categories, compart
     <Link className="back-link" href="/carga"><ArrowLeft size={18} aria-hidden="true" /> Elegir otra ubicación</Link>
     <header className="rapid-location-header">
       <p className="eyebrow">CARGA RÁPIDA · {current.tipo === "caja" ? `ESTANTE ${current.estante_id}` : `TORRE C${current.torre_id} · PISO ${current.piso}`}</p>
-      <h1 style={{ overflowWrap: "anywhere" }}>{current.codigo}</h1>
-      <p>{physicalLocationContext(current)}</p>
-      <span className={current.ocupado ? "rapid-status occupied" : "rapid-status available"}>{current.ocupado ? "Ocupado" : "Disponible"}</span>
-      <Link className="rapid-tower-link" href={searchLocationHref(current)}><MapPin size={17} aria-hidden="true" /> {current.tipo === "caja" ? "Ver en estante" : "Ver en torre"}</Link>
+      <h1 className="rapid-code" data-size={codeSize(current.codigo)}>{current.codigo}</h1>
+      <p className="rapid-context">{physicalLocationContext(current)}</p>
+      <div className="rapid-header-meta">
+        <span className={current.ocupado ? "rapid-status occupied" : "rapid-status available"}>{current.ocupado ? "Ocupado" : "Disponible"}</span>
+        <Link className="rapid-tower-link" href={searchLocationHref(current)}><MapPin size={17} aria-hidden="true" /> {current.tipo === "caja" ? "Ver en estante" : "Ver en torre"}</Link>
+      </div>
     </header>
 
-    {notice && <p className="catalog-message success" role="status"><Check size={18} aria-hidden="true" /> {notice}</p>}
+    <div className="rapid-notice" role="status" aria-live="polite">{notice && <p className="catalog-message success"><Check size={18} aria-hidden="true" /> {notice}</p>}</div>
 
     <section className="rapid-content" aria-label="Contenido actual">
       <h2>Contenido actual</h2>
@@ -78,36 +104,53 @@ export function RapidLocation({ current, adjacent, products, categories, compart
           // eslint-disable-next-line @next/next/no-img-element
           <img src={item.fotoUrl} alt="" loading="lazy" />
         ) : <Package size={22} aria-hidden="true" />}</span>
-        <span className="rapid-product-name"><strong>{item.nombre}</strong><small>{item.categoria}</small></span>
+        <span className="rapid-product-name" id={`rapid-product-${item.id}`}><strong>{item.nombre}</strong><small>{item.categoria}</small></span>
         <strong>{item.cantidad.toLocaleString("es-CL")}</strong>
-        <button type="button" className="catalog-quiet-button" onClick={() => setAdjust({ id: item.id, stock: item.cantidad })}>Ajustar</button>
+        <button type="button" className="catalog-quiet-button" aria-describedby={`rapid-product-${item.id}`} onClick={() => setAdjust({ id: item.id, stock: item.cantidad })}>Ajustar</button>
       </article>)}</div> : <p className="rapid-empty">Sin productos. Puedes continuar sin registrar stock.</p>}
     </section>
 
-    {mode === "list" && <button type="button" className="catalog-button primary rapid-primary" onClick={() => { setNotice(""); setMode("select"); }}><Plus size={21} aria-hidden="true" /> {current.productos.length ? "Añadir otro producto" : "Añadir producto"}</button>}
+    {mode === "list" && <button type="button" ref={primaryRef} className="catalog-button primary rapid-primary" onClick={() => { setNotice(""); setMode("select"); }}><Plus size={21} aria-hidden="true" /> {current.productos.length ? "Añadir otro producto" : "Añadir producto"}</button>}
     {mode === "select" && <section className="rapid-step" aria-label="Seleccionar producto">
+      <p className="rapid-step-label">Paso 1 de 2 · Producto</p>
       <div className="rapid-step-heading"><h2>Seleccionar producto</h2><button type="button" className="catalog-quiet-button" onClick={() => setMode("list")}>Cancelar</button></div>
       <label className="catalog-filter"><Search size={19} aria-hidden="true" /><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar por nombre" aria-label="Buscar producto existente" autoComplete="off" autoFocus /></label>
+      <p className="rapid-result-count" role="status" aria-live="polite">{matches.length > RESULT_LIMIT
+        ? `Mostrando los primeros ${RESULT_LIMIT} de ${matches.length.toLocaleString("es-CL")} productos. Escribe más para acotar.`
+        : `${matches.length.toLocaleString("es-CL")} ${matches.length === 1 ? "producto" : "productos"}`}</p>
       {filtered.length ? <div className="rapid-select-list">{filtered.map((item) => <button type="button" key={item.id} onClick={() => choose(item)}><Package size={22} aria-hidden="true" /><span><strong>{item.nombre}</strong><small>{item.categoria}</small></span><ArrowRight size={17} aria-hidden="true" /></button>)}</div> : <p className="search-empty">No encontramos productos.</p>}
       <button type="button" className="catalog-button rapid-create-button" onClick={() => { setError(""); setMode("new"); }}><Plus size={18} aria-hidden="true" /> Crear nuevo producto</button>
     </section>}
-    {mode === "new" && <section className="rapid-step" aria-label="Crear producto durante la carga"><h2>Nuevo producto para {current.codigo}</h2>
+    {mode === "new" && <section className="rapid-step" aria-label="Crear producto durante la carga">
+      <p className="rapid-step-label">Paso 1 de 2 · Producto</p>
+      <h2 ref={newStepRef} tabIndex={-1}>Nuevo producto para {current.codigo}</h2>
       <ProductForm quick initialCategories={categories} onCancel={() => setMode("select")} onCreated={(product) => {
         choose(product);
         router.refresh();
       }} />
     </section>}
     {mode === "quantity" && selected && <section className="rapid-step" aria-label="Registrar cantidad">
+      <p className="rapid-step-label">Paso 2 de 2 · Cantidad</p>
       <h2>{selected.nombre}</h2><p>{selected.categoria} · Destino {current.codigo}</p>
-      <form onSubmit={save}><label className="catalog-field">Cantidad<input type="text" inputMode="numeric" pattern="[0-9]*" value={quantity} onChange={(event) => { setQuantity(event.target.value); setError(""); }} placeholder="Ej. 17" disabled={pending} autoFocus /></label>
+      {registered !== undefined && <p className="rapid-registered" id="rapid-registered">Stock registrado en {current.codigo}: {registered.toLocaleString("es-CL")} unidades</p>}
+      <form onSubmit={save} noValidate>
+        <div className="catalog-field"><label htmlFor="rapid-quantity">Cantidad</label>
+          <div className="rapid-quantity-row">
+            <input id="rapid-quantity" type="text" inputMode="numeric" pattern="[0-9]*" value={quantity} onChange={(event) => { setQuantity(event.target.value); setError(""); setQuantityError(""); }} placeholder="Ej. 17" disabled={pending} autoFocus
+              aria-invalid={quantityError ? true : undefined}
+              aria-describedby={[registered !== undefined && "rapid-registered", "rapid-quantity-unit", quantityError && "rapid-quantity-error"].filter(Boolean).join(" ")} />
+            <span id="rapid-quantity-unit" className="rapid-unit">unidades</span>
+          </div>
+          {quantityError && <p id="rapid-quantity-error" className="catalog-field-error" role="alert">{quantityError}</p>}
+        </div>
         {error && <p className="catalog-message error" role="alert">{error}</p>}
         <div className="rapid-step-actions"><button type="button" className="catalog-quiet-button" onClick={() => setMode("select")} disabled={pending}>Cambiar producto</button><button type="submit" className="catalog-button primary" disabled={pending}>{pending ? "Guardando…" : `Guardar entrada en ${current.codigo}`}</button></div>
       </form>
     </section>}
 
     <nav className="rapid-neighbors" aria-label="Recorrido físico">
-      {previous && <Link href={rapidLocationHref(previous)} className="catalog-button" style={{ overflowWrap: "anywhere" }}><ArrowLeft size={18} aria-hidden="true" /> Anterior · {previous.codigo}</Link>}
-      {next && <Link href={rapidLocationHref(next)} className="catalog-button" style={{ overflowWrap: "anywhere" }}>{next.tipo === "caja" ? `${current.tipo === "caja" && next.estante_id !== current.estante_id ? `Pasar a Estante ${next.estante_id}` : "Siguiente"} · ${next.codigo}` : current.tipo === "compartimiento" && next.torre_id === current.torre_id ? `Siguiente · ${next.codigo}` : `Pasar a Torre C${next.torre_id} · ${next.codigo}`} <ArrowRight size={18} aria-hidden="true" /></Link>}
+      {previous && <Link href={rapidLocationHref(previous)} className="catalog-button"><ArrowLeft size={18} aria-hidden="true" /> Anterior · {previous.codigo}</Link>}
+      {next && <Link href={rapidLocationHref(next)} className="catalog-button">{next.tipo === "caja" ? `${current.tipo === "caja" && next.estante_id !== current.estante_id ? `Pasar a Estante ${next.estante_id}` : "Siguiente"} · ${next.codigo}` : current.tipo === "compartimiento" && next.torre_id === current.torre_id ? `Siguiente · ${next.codigo}` : `Pasar a Torre C${next.torre_id} · ${next.codigo}`} <ArrowRight size={18} aria-hidden="true" /></Link>}
     </nav>
     {adjust && <StockOperationDialog operation={{ tipo: "ajuste", productoId: adjust.id, origenId: current.id, currentStock: adjust.stock }}
       products={products} locations={compartments} onClose={() => setAdjust(null)} onSuccess={(message) => { setNotice(message); router.refresh(); }} />}
