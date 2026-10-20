@@ -8,6 +8,13 @@ import { submitStockOperation } from "@/app/(workspace)/stock-actions";
 import { StockActionMenu } from "@/components/stock-action-menu";
 import { matchesCatalogQuery } from "@/lib/rapid-model";
 import {
+  ABANDON_UNCERTAIN_MESSAGE,
+  NO_SECURE_ID_MESSAGE,
+  UNCERTAIN_RETRY_MESSAGE,
+  createIdentityStore,
+  movementFingerprint,
+} from "@/lib/movement-request";
+import {
   parseQuantity,
   validateStockOperation,
   physicalLocationContext,
@@ -16,10 +23,6 @@ import {
   type StockOperationInput,
   type StockOperationType,
 } from "@/lib/stock-model";
-
-// Shown when the request to register an entrada/retiro/traslado fails at the transport level: the movement may or may not
-// have been recorded, so the user must check the Historial before retrying (no idempotency key exists yet).
-export const UNCERTAIN_MOVEMENT_MESSAGE = "No pudimos confirmar el movimiento. Revisa el Historial antes de reintentar.";
 
 export type StockOperationStart = {
   tipo: StockOperationType;
@@ -77,6 +80,10 @@ export function StockOperationDialog({
   const [confirming, setConfirming] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
+  // Request identity of this logical operation (entrada/retiro/traslado): kept in memory only, never in browser storage.
+  const [identity] = useState(createIdentityStore);
+  const [uncertain, setUncertain] = useState(false);
+  const [abandonWarned, setAbandonWarned] = useState(false);
 
   useEffect(() => {
     if (!isBrowser) return;
@@ -137,27 +144,60 @@ export function StockOperationDialog({
 
   async function perform(input: StockOperationInput) {
     if (busyRef.current) return;
+    let request = input;
+    if (input.tipo !== "ajuste") {
+      // One id per logical operation, reused only while its outcome is unconfirmed and nothing in it has changed.
+      const solicitudId = identity.acquire(movementFingerprint(input));
+      if (!solicitudId) { setError(NO_SECURE_ID_MESSAGE); return; }
+      request = { ...input, solicitudId };
+    }
     busyRef.current = true;
     setPending(true);
     setError("");
     try {
-      const result = await submitStockOperation(input);
-      if (!result.ok) {
-        setConfirming(false);
+      const result = await submitStockOperation(request);
+      if (result.ok) {
+        identity.release(); // success or deduplicated: the id can never be reused by the next operation
+        setUncertain(false);
+        onSuccess(result.message);
+        onClose();
+        router.refresh();
+        return;
+      }
+      if (result.uncertain) {
+        // It may have been recorded: keep the id and the parameters (read-only confirmation) and offer an explicit retry.
+        setUncertain(true);
+        setConfirming(true);
         setError(result.message);
         return;
       }
-      onSuccess(result.message);
-      onClose();
-      router.refresh();
-    } catch {
+      identity.release(); // definitive error
+      setUncertain(false);
       setConfirming(false);
-      // The request may have reached the server: a plain retry of an entrada/retiro/traslado could duplicate it.
-      setError(input.tipo === "ajuste" ? "No fue posible completar el movimiento. Inténtalo nuevamente." : UNCERTAIN_MOVEMENT_MESSAGE);
+      setError(result.message);
+    } catch {
+      if (input.tipo === "ajuste") {
+        setConfirming(false);
+        setError("No fue posible completar el movimiento. Inténtalo nuevamente.");
+      } else {
+        setUncertain(true);
+        setConfirming(true);
+        setError(UNCERTAIN_RETRY_MESSAGE);
+      }
     } finally {
       busyRef.current = false;
       setPending(false);
     }
+  }
+
+  // Leaving with an unconfirmed movement first warns once: the Historial must be checked before operating again.
+  function requestClose() {
+    if (uncertain && !abandonWarned) {
+      setAbandonWarned(true);
+      setError(ABANDON_UNCERTAIN_MESSAGE);
+      return;
+    }
+    onClose();
   }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -186,13 +226,13 @@ export function StockOperationDialog({
       ref={dialogRef}
       className="stock-dialog"
       aria-labelledby="stock-dialog-title"
-      onCancel={(event) => { if (pending) event.preventDefault(); else onClose(); }}
-      onClick={(event) => { if (event.target === event.currentTarget && !pending) onClose(); }}
+      onCancel={(event) => { if (pending) event.preventDefault(); else if (uncertain && !abandonWarned) { event.preventDefault(); requestClose(); } else onClose(); }}
+      onClick={(event) => { if (event.target === event.currentTarget && !pending) requestClose(); }}
     >
       <div className="stock-dialog-inner">
         <header className="stock-dialog-header">
           <div><p className="eyebrow">MOVIMIENTO DE INVENTARIO</p><h2 id="stock-dialog-title">{TITLES[operation.tipo]}</h2></div>
-          <button type="button" className="sheet-close" aria-label="Cerrar operación" onClick={onClose} disabled={pending}><X size={20} aria-hidden="true" /></button>
+          <button type="button" className="sheet-close" aria-label="Cerrar operación" onClick={requestClose} disabled={pending}><X size={20} aria-hidden="true" /></button>
         </header>
         {confirming ? (
           <form onSubmit={handleSubmit} className="stock-confirmation">
@@ -223,8 +263,10 @@ export function StockOperationDialog({
             )}
             {error && <p role="alert" className="catalog-message error">{error}</p>}
             <div className="stock-dialog-actions">
-              <button type="button" className="catalog-quiet-button" disabled={pending} onClick={() => setConfirming(false)}>Volver</button>
-              <button type="submit" className="catalog-button primary" disabled={pending}>{pending ? "Registrando…" : "Confirmar movimiento"}</button>
+              {uncertain
+                ? <button type="button" className="catalog-quiet-button" disabled={pending} onClick={requestClose}>Cancelar</button>
+                : <button type="button" className="catalog-quiet-button" disabled={pending} onClick={() => setConfirming(false)}>Volver</button>}
+              <button type="submit" className="catalog-button primary" disabled={pending}>{pending ? "Registrando…" : uncertain ? "Reintentar movimiento" : "Confirmar movimiento"}</button>
             </div>
           </form>
         ) : (
@@ -271,7 +313,7 @@ export function StockOperationDialog({
             {(operation.tipo === "retiro" || operation.tipo === "traslado") && <p className="stock-available">Disponible en origen: {operation.currentStock?.toLocaleString("es-CL") ?? 0} unidades</p>}
             {error && <p role="alert" className="catalog-message error">{error}</p>}
             <div className="stock-dialog-actions">
-              <button type="button" className="catalog-quiet-button" onClick={onClose} disabled={pending}>Cancelar</button>
+              <button type="button" className="catalog-quiet-button" onClick={requestClose} disabled={pending}>Cancelar</button>
               <button type="submit" className="catalog-button primary" disabled={pending}>{pending ? "Registrando…" : operation.tipo === "entrada" ? "Registrar entrada" : "Continuar"}</button>
             </div>
           </form>

@@ -73,6 +73,8 @@ export type StockOperationInput = {
   cantidad?: number;
   cantidadFisica?: number;
   cantidadEsperada?: number;
+  /** UUID of the logical request (entrada/retiro/traslado): the database refuses a second movement with the same id. */
+  solicitudId?: string;
 };
 
 export const MAX_STOCK_QUANTITY = 2147483647;

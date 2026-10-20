@@ -71,7 +71,7 @@ test('UI06: carga rápida, componentes reales y ProductForm quick real', async t
         else { page = url.pathname.startsWith('/carga/ubicacion/') ? await f.rapidBoxPage({ params: Promise.resolve({ id: url.pathname.split('/')[3] }) }) : await f.rapidTowerPage({ params: Promise.resolve({ codigo: decodeURIComponent(url.pathname.split('/')[2]) }) }); kind = 'location'; }
         res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ path: raw, kind, props: page.props }));
       } else if (target.pathname === '/action' || target.pathname === '/resolve') {
-        const input = await body(); if (target.pathname === '/action' && f.state.transportFails) { response.statusCode = 503; response.end('Bad gateway'); return; } const result = target.pathname === '/action' ? await f.submitStockOperation(input) : await f.resolveRapidCode(input);
+        const input = await body(); if (target.pathname === '/action') (f.state.actionInputs ??= []).push(input); if (target.pathname === '/action' && f.state.transportFails) { response.statusCode = 503; response.end('Bad gateway'); return; } const result = target.pathname === '/action' ? await f.submitStockOperation(input) : await f.resolveRapidCode(input);
         if (target.pathname === '/action' && f.state.responseDelay) await new Promise(resolve => setTimeout(resolve, f.state.responseDelay));
         res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify(result));
       } else if (target.pathname === '/product') {
@@ -207,11 +207,48 @@ test('UI06: carga rápida, componentes reales y ProductForm quick real', async t
   await t.test('C1-C: fallo de red en la entrada → «No pudimos confirmar el movimiento…»; errores específicos intactos', async () => {
     f = createShelfFixture(); const page = await open('/carga/ubicacion/74'); await pick(page, 'esp32', /ESP32-S3/);
     const quantity = page.getByLabel('Cantidad', { exact: true }); await quantity.fill('2'); f.state.transportFails = true; await submitText(page).click();
-    const alert = page.getByRole('alert'); await alert.waitFor(); assert.equal(flat(await alert.innerText()), 'No pudimos confirmar el movimiento. Revisa el Historial antes de reintentar.');
+    const alert = page.getByRole('alert'); await alert.waitFor(); assert.equal(flat(await alert.innerText()), 'No pudimos confirmar el movimiento. Puedes reintentar: si ya se registró, no se duplicará. El resultado del movimiento anterior no se confirmó. Si sales ahora, revisa el Historial antes de volver a operar.');
     assert.equal(await quantity.inputValue(), '2', 'la cantidad se conserva'); assert.equal(await quantity.getAttribute('aria-invalid'), null, 'no es un error de campo');
     assert.equal(await submitText(page).isEnabled(), true); assert.equal(f.state.writes.length, 0);
     f.state.transportFails = false; f.state.entryError = '23514'; await submitText(page).click(); await page.getByRole('alert').filter({ hasText: 'stock suficiente' }).waitFor();
     assert.doesNotMatch(await page.getByRole('alert').innerText(), /No pudimos confirmar/); assert.deepEqual(errorsOf.get(page), []); await page.close();
+  });
+
+  const V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+  await t.test('C2b Carga rápida: UUID en cada entrada, reintento incierto con el mismo UUID, respuesta perdida → «ya estaba registrado» y sin duplicar', async () => {
+    f = createShelfFixture(); const page = await open('/carga/ubicacion/74'); await pick(page, 'esp32', /ESP32-S3/);
+    const quantity = page.getByLabel('Cantidad', { exact: true }); await quantity.fill('2'); f.state.loseResponses = 1; await submitText(page).click();
+    const alert = page.getByRole('alert'); await alert.waitFor(); assert.match(flat(await alert.innerText()), /^No pudimos confirmar el movimiento\. Puedes reintentar: si ya se registró, no se duplicará\./);
+    assert.equal(await quantity.isDisabled(), true, 'la solicitud incierta no se puede editar'); assert.equal(await page.getByRole('button', { name: 'Cambiar producto' }).isDisabled(), true);
+    assert.equal(f.state.tables.inventario.find(r => r.compartimiento_id === 74 && r.producto_id === secondProductId).cantidad, 2, 'la primera escritura sí se aplicó');
+    await submitText(page).click(); await page.getByRole('status').filter({ hasText: 'Este movimiento ya estaba registrado; no se duplicó.' }).waitFor();
+    const inputs = f.state.actionInputs; assert.equal(inputs.length, 2); assert.match(inputs[0].solicitudId, V4); assert.equal(inputs[0].solicitudId, inputs[1].solicitudId, 'el reintento reutiliza el UUID');
+    assert.equal(f.state.tables.inventario.find(r => r.compartimiento_id === 74 && r.producto_id === secondProductId).cantidad, 2, 'una sola aplicación'); assert.equal(f.state.tables.movimientos.length, 1); assert.deepEqual(errorsOf.get(page), []); await page.close();
+  });
+
+  await t.test('C2b Carga rápida: fallo de red sin aplicar → reintento con el mismo UUID se registra una vez; dos entradas idénticas consecutivas usan UUID distintos', async () => {
+    f = createShelfFixture(); const page = await open('/carga/ubicacion/74'); await pick(page, 'esp32', /ESP32-S3/);
+    const quantity = page.getByLabel('Cantidad', { exact: true }); await quantity.fill('2'); f.state.transportFails = true; await submitText(page).click(); await page.getByRole('alert').waitFor();
+    f.state.transportFails = false; await submitText(page).click(); await page.getByRole('status').filter({ hasText: 'ESP32-S3: +2 unidades registradas en A2.' }).waitFor();
+    assert.equal(f.state.actionInputs[0].solicitudId, f.state.actionInputs[1].solicitudId); assert.equal(f.state.tables.movimientos.length, 1);
+    await pick(page, 'esp32', /ESP32-S3/); await page.getByLabel('Cantidad', { exact: true }).fill('2'); await submitText(page).click(); await page.getByRole('status').filter({ hasText: 'ESP32-S3: +2 unidades registradas en A2.' }).waitFor();
+    const ids = f.state.actionInputs.map(input => input.solicitudId); assert.notEqual(ids[2], ids[1], 'una segunda operación legítima idéntica recibe otro UUID');
+    assert.equal(f.state.tables.movimientos.length, 2); assert.equal(f.state.tables.inventario.find(r => r.compartimiento_id === 74 && r.producto_id === secondProductId).cantidad, 4); await page.close();
+  });
+
+  await t.test('C2b Carga rápida: cantidad distinta tras un error definitivo → UUID nuevo; sin crypto.randomUUID se usa getRandomValues y sin fuentes seguras se bloquea', async () => {
+    f = createShelfFixture(); let page = await open('/carga/ubicacion/74'); await pick(page, 'esp32', /ESP32-S3/);
+    f.state.entryError = '23503'; await page.getByLabel('Cantidad', { exact: true }).fill('2'); await submitText(page).click(); await page.getByRole('alert').waitFor(); f.state.entryError = null;
+    await page.getByLabel('Cantidad', { exact: true }).fill('3'); await submitText(page).click(); await page.getByRole('status').filter({ hasText: 'unidades registradas' }).waitFor();
+    const ids = f.state.actionInputs.map(input => input.solicitudId); assert.notEqual(ids[0], ids[1], 'tras un rechazo definitivo no se reutiliza el UUID'); await page.close();
+    f = createShelfFixture(); page = await browser.newPage({ viewport: { width: 390, height: 844 } }); page.setDefaultTimeout(7000); await page.route('**/*', r => r.request().url().startsWith(url) ? r.continue() : r.abort());
+    await page.addInitScript(() => { Object.defineProperty(crypto, 'randomUUID', { value: undefined, configurable: true }); }); await page.goto(url + '/carga/ubicacion/74'); await page.waitForFunction(() => document.querySelector('.rapid-location-page'));
+    await pick(page, 'esp32', /ESP32-S3/); await page.getByLabel('Cantidad', { exact: true }).fill('1'); await submitText(page).click(); await page.getByRole('status').filter({ hasText: 'unidad registrada' }).waitFor(); assert.match(f.state.actionInputs[0].solicitudId, V4); await page.close();
+    f = createShelfFixture(); page = await browser.newPage({ viewport: { width: 390, height: 844 } }); page.setDefaultTimeout(7000); await page.route('**/*', r => r.request().url().startsWith(url) ? r.continue() : r.abort());
+    await page.addInitScript(() => { Object.defineProperty(crypto, 'randomUUID', { value: undefined, configurable: true }); Object.defineProperty(crypto, 'getRandomValues', { value: undefined, configurable: true }); });
+    await page.goto(url + '/carga/ubicacion/74'); await page.waitForFunction(() => document.querySelector('.rapid-location-page')); await pick(page, 'esp32', /ESP32-S3/);
+    await page.getByLabel('Cantidad', { exact: true }).fill('1'); await submitText(page).click(); await page.getByRole('alert').waitFor(); assert.match(flat(await page.getByRole('alert').innerText()), /no puede generar identificadores seguros/);
+    assert.equal(f.state.actionInputs ?? undefined, undefined, 'la acción no se llamó'); assert.equal(f.state.tables.movimientos.length, 0); await page.close();
   });
 
   await t.test('singular y plural de unidades: campo, aviso y stock registrado (V14)', async () => {

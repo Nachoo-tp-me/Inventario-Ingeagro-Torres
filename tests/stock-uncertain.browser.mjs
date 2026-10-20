@@ -1,7 +1,8 @@
-// C1-C: operación incierta. Si la llamada para registrar una entrada, un retiro o un traslado falla a nivel de red, el
-// resultado es incierto: la interfaz pide revisar el Historial antes de reintentar. Los errores específicos (stock,
-// conflicto, permisos) y los ajustes conservan su tratamiento. Componentes reales (detalle de caja + StockOperationDialog)
-// con el fixture en memoria; nunca Supabase, JWT reales ni producción.
+// C1-C / C2b: operación incierta e idempotencia en el diálogo de stock. Si la llamada para registrar una entrada, un retiro o un
+// traslado falla a nivel de red o su respuesta se pierde, el resultado es incierto: el diálogo conserva el UUID y los datos
+// (confirmación de solo lectura) y ofrece un reintento explícito que no puede duplicar el movimiento. Los errores específicos y
+// los ajustes conservan su tratamiento. Componentes y acción REALES (detalle de caja + StockOperationDialog + submitStockOperation)
+// con el fixture en memoria que reproduce UNIQUE(solicitud_id); nunca Supabase, JWT reales ni producción.
 // Node >=22; esbuild y Playwright externos. SHELVES_TEST_TOOLS=<tools> node --test tests/stock-uncertain.browser.mjs
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -12,7 +13,9 @@ import { createShelfFixture, productId, root, requireTools } from "./helpers/she
 
 const { build } = requireTools("esbuild");
 const { chromium } = requireTools("playwright");
-const UNCERTAIN = "No pudimos confirmar el movimiento. Revisa el Historial antes de reintentar.";
+const UNCERTAIN = "No pudimos confirmar el movimiento. Puedes reintentar: si ya se registró, no se duplicará.";
+const ABANDON = "El resultado del movimiento anterior no se confirmó. Si sales ahora, revisa el Historial antes de volver a operar.";
+const V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const fixture = `
   import { useEffect,useState,useSyncExternalStore } from 'react';
   import { createRoot } from 'react-dom/client';
@@ -31,7 +34,7 @@ const fixture = `
   createRoot(document.getElementById('root')).render(<AppShell><Current/></AppShell>);
 `;
 
-test("C1-C: operación incierta por fallo de red (entrada, retiro, traslado) y errores específicos intactos", async t => {
+test("C1-C/C2b: operación incierta, identidad de solicitud y reintento sin duplicados en el diálogo de stock", async t => {
   const bundle = await build({ stdin: { resolveDir: root, loader: "tsx", contents: fixture }, bundle: true, write: false, jsx: "automatic", define: { "process.env.NODE_ENV": '"development"' },
     plugins: [{ name: "offline", setup(b) {
       b.onResolve({ filter: /^(next\/navigation|next\/link|@\/lib\/supabase\/client|@\/app\/\(workspace\)\/(stock-actions|box-code-actions))$/ }, args => ({ path: args.path, namespace: "fake" }));
@@ -61,11 +64,12 @@ test("C1-C: operación incierta por fallo de red (entrada, retiro, traslado) y e
   });
   await new Promise(resolve => server.listen(0, "127.0.0.1", resolve)); t.after(() => new Promise(resolve => server.close(resolve)));
   const base = `http://127.0.0.1:${server.address().port}`, browser = await chromium.launch(); t.after(() => browser.close());
-  async function open() {
+  async function open(init) {
     active = createShelfFixture(); transportFails = false; actionCalls.length = 0;
     const page = await browser.newPage({ viewport: { width: 390, height: 850 }, hasTouch: true }); page.setDefaultTimeout(8000);
     const errors = []; page.on("pageerror", e => errors.push(e.message)); page.errors = errors;
     await page.route("**/*", route => route.request().url().startsWith(base) ? route.continue() : route.abort());
+    if (init) await page.addInitScript(init);
     await page.goto(base + "/estantes/1?caja=73"); await page.locator(".compartment-dialog[open]").waitFor(); return page;
   }
   async function openAction(page, name) {
@@ -77,39 +81,88 @@ test("C1-C: operación incierta por fallo de red (entrada, retiro, traslado) y e
   const alertText = async dialog => (await dialog.getByRole("alert").innerText()).replace(/\s+/g, " ").trim();
   const stockOf = () => active.state.tables.inventario.find(row => row.compartimiento_id === 73 && row.producto_id === productId).cantidad;
 
-  await t.test("entrada: fallo de red → mensaje de precaución; sin cerrar el diálogo ni perder la cantidad", async () => {
-    const page = await open(); const dialog = await openAction(page, "Agregar"); await dialog.locator("#stock-quantity").fill("3");
-    transportFails = true; await dialog.getByRole("button", { name: "Registrar entrada", exact: true }).click(); await dialog.getByRole("alert").waitFor();
-    assert.equal(await alertText(dialog), UNCERTAIN); assert.equal(await dialog.locator("#stock-quantity").inputValue(), "3"); assert.equal(actionCalls.length, 1);
-    assert.equal(await dialog.getByRole("button", { name: "Registrar entrada", exact: true }).isEnabled(), true, "el usuario decide; no se reintenta solo"); await page.close();
+  const ids = () => actionCalls.map(call => call.solicitudId);
+  const submitFor = async (dialog, tipo) => { // abre el flujo de cada operación hasta su confirmación y la envía
+    if (tipo === "entrada") { await dialog.locator("#stock-quantity").fill("3"); await dialog.getByRole("button", { name: "Registrar entrada", exact: true }).click(); return; }
+    await dialog.locator("#stock-quantity").fill("2"); await dialog.getByRole("button", { name: "Continuar", exact: true }).click(); await dialog.locator(".stock-confirmation").waitFor();
+    await dialog.getByRole("button", { name: "Confirmar movimiento", exact: true }).click();
+  };
+  const notice = page => page.locator(".compartment-dialog[open]").getByText(/ya estaba registrado|Movimiento registrado/).first();
+
+  await t.test("entrada: fallo de red → incierto, confirmación de solo lectura con el mismo UUID y reintento explícito que se aplica una vez", async () => {
+    const page = await open(); const dialog = await openAction(page, "Agregar"); transportFails = true; await submitFor(dialog, "entrada"); await dialog.getByRole("alert").waitFor();
+    assert.equal(await alertText(dialog), UNCERTAIN); assert.equal(actionCalls.length, 1); assert.match(ids()[0], V4);
+    assert.equal(await dialog.locator("#stock-quantity").count(), 0, "los datos de la solicitud no se pueden editar mientras es incierta");
+    assert.equal(await dialog.getByRole("button", { name: "Volver" }).count(), 0, "sin «Volver»"); assert.equal(await dialog.getByRole("button", { name: "Reintentar movimiento", exact: true }).isEnabled(), true);
+    transportFails = false; await dialog.getByRole("button", { name: "Reintentar movimiento", exact: true }).click(); await page.locator(".stock-dialog[open]").waitFor({ state: "hidden" });
+    assert.deepEqual(ids(), [ids()[0], ids()[0]], "el reintento reutiliza el UUID"); assert.equal(stockOf(), 10, "aplicado una sola vez"); assert.equal(active.state.tables.movimientos.length, 1); await page.close();
   });
 
-  await t.test("retiro y traslado: fallo de red tras confirmar → mensaje de precaución", async () => {
-    let page = await open(); let dialog = await openAction(page, "Retirar"); await dialog.locator("#stock-quantity").fill("2");
-    await dialog.getByRole("button", { name: "Continuar", exact: true }).click(); await dialog.locator(".stock-confirmation").waitFor();
-    transportFails = true; await dialog.getByRole("button", { name: "Confirmar movimiento", exact: true }).click(); await dialog.getByRole("alert").waitFor();
-    assert.equal(await alertText(dialog), UNCERTAIN); assert.equal(actionCalls.length, 1); assert.equal(actionCalls[0].tipo, "retiro"); await page.close();
-    page = await open(); dialog = await openAction(page, "Mover"); await dialog.locator(".stock-option-list.locations button").first().click(); await dialog.locator("#stock-quantity").fill("1");
-    await dialog.getByRole("button", { name: "Continuar", exact: true }).click(); await dialog.locator(".stock-confirmation").waitFor();
-    transportFails = true; await dialog.getByRole("button", { name: "Confirmar movimiento", exact: true }).click(); await dialog.getByRole("alert").waitFor();
-    assert.equal(await alertText(dialog), UNCERTAIN); assert.equal(actionCalls[0].tipo, "traslado"); assert.deepEqual(page.errors, []); await page.close();
+  await t.test("respuesta perdida tras confirmar: el reintento recibe «ya estaba registrado» con la fecha y no duplica", async () => {
+    const page = await open(); const dialog = await openAction(page, "Agregar"); active.state.loseResponses = 1; await submitFor(dialog, "entrada"); await dialog.getByRole("alert").waitFor();
+    assert.equal(await alertText(dialog), UNCERTAIN); assert.equal(stockOf(), 10, "la primera escritura SÍ se aplicó");
+    await dialog.getByRole("button", { name: "Reintentar movimiento", exact: true }).click(); await page.locator(".stock-dialog[open]").waitFor({ state: "hidden" });
+    await page.getByText(/Este movimiento ya estaba registrado; no se duplicó\. Registrado el .*2026/).first().waitFor();
+    assert.deepEqual(ids(), [ids()[0], ids()[0]]); assert.equal(stockOf(), 10, "una sola aplicación"); assert.equal(active.state.tables.movimientos.length, 1); await page.close();
   });
 
-  await t.test("ajuste físico: el fallo de red conserva su mensaje anterior (no se duplica: cantidadEsperada protege el reintento)", async () => {
-    const page = await open(); const dialog = await openAction(page, "Ajustar"); await dialog.locator("#stock-quantity").fill("4");
-    await dialog.getByRole("button", { name: "Continuar", exact: true }).click(); await dialog.locator(".stock-adjustment").waitFor();
-    transportFails = true; await dialog.getByRole("button", { name: "Confirmar movimiento", exact: true }).click(); await dialog.getByRole("alert").waitFor();
-    assert.equal(await alertText(dialog), "No fue posible completar el movimiento. Inténtalo nuevamente."); assert.notEqual(await alertText(dialog), UNCERTAIN); await page.close();
+  await t.test("retiro y traslado: fallo de red y reintento con el mismo UUID, sin duplicar", async () => {
+    let page = await open(); let dialog = await openAction(page, "Retirar"); transportFails = true; await submitFor(dialog, "retiro"); await dialog.getByRole("alert").waitFor(); assert.equal(await alertText(dialog), UNCERTAIN);
+    transportFails = false; await dialog.getByRole("button", { name: "Reintentar movimiento", exact: true }).click(); await page.locator(".stock-dialog[open]").waitFor({ state: "hidden" });
+    assert.equal(ids()[0], ids()[1]); assert.equal(actionCalls[1].tipo, "retiro"); assert.equal(stockOf(), 5); assert.equal(active.state.tables.movimientos.length, 1); await page.close();
+    page = await open(); dialog = await openAction(page, "Mover"); await dialog.locator(".stock-option-list.locations button").first().click(); active.state.loseResponses = 1;
+    await dialog.locator("#stock-quantity").fill("1"); await dialog.getByRole("button", { name: "Continuar", exact: true }).click(); await dialog.locator(".stock-confirmation").waitFor();
+    await dialog.getByRole("button", { name: "Confirmar movimiento", exact: true }).click(); await dialog.getByRole("alert").waitFor();
+    await dialog.getByRole("button", { name: "Reintentar movimiento", exact: true }).click(); await page.locator(".stock-dialog[open]").waitFor({ state: "hidden" });
+    assert.equal(actionCalls[0].tipo, "traslado"); assert.equal(ids()[0], ids()[1]); assert.equal(stockOf(), 6, "el traslado descontó el origen una sola vez"); assert.equal(active.state.tables.movimientos.length, 1); await page.close();
   });
 
-  await t.test("errores conocidos conservan su tratamiento específico (stock, conflicto, registro inexistente)", async () => {
-    const page = await open(); let dialog = await openAction(page, "Retirar"); await dialog.locator("#stock-quantity").fill("2");
+  await t.test("abandonar un resultado incierto avisa antes de salir; una nueva operación recibe otro UUID", async () => {
+    const page = await open(); let dialog = await openAction(page, "Retirar"); transportFails = true; await submitFor(dialog, "retiro"); await dialog.getByRole("alert").waitFor();
+    await dialog.getByRole("button", { name: "Cancelar", exact: true }).click(); assert.equal(await alertText(dialog), ABANDON, "primer intento de salir: advertencia"); assert.equal(await page.locator(".stock-dialog[open]").count(), 1);
+    await page.keyboard.press("Escape"); await page.locator(".stock-dialog[open]").waitFor({ state: "hidden" }); // segunda salida: cierra
+    transportFails = false; dialog = await openAction(page, "Retirar"); await submitFor(dialog, "retiro"); await page.locator(".stock-dialog[open]").waitFor({ state: "hidden" });
+    assert.equal(actionCalls.length, 2); assert.notEqual(ids()[0], ids()[1], "diálogo nuevo = operación nueva = UUID nuevo"); await page.close();
+  });
+
+  await t.test("dos operaciones legítimas idénticas consecutivas reciben UUID distintos y se aplican las dos", async () => {
+    const page = await open();
+    for (let i = 0; i < 2; i++) { const dialog = await openAction(page, "Retirar"); await submitFor(dialog, "retiro"); await page.locator(".stock-dialog[open]").waitFor({ state: "hidden" }); }
+    assert.equal(actionCalls.length, 2); assert.notEqual(ids()[0], ids()[1]); assert.equal(stockOf(), 3); assert.equal(active.state.tables.movimientos.length, 2); await page.close();
+  });
+
+  await t.test("error definitivo: el UUID se descarta; el siguiente intento (otro envío) usa uno nuevo", async () => {
+    const page = await open(); const dialog = await openAction(page, "Retirar"); active.state.entryError = "23514"; await submitFor(dialog, "retiro"); await dialog.getByRole("alert").waitFor();
+    assert.match(await alertText(dialog), /No hay stock suficiente/); await dialog.locator("#stock-quantity").waitFor(); assert.equal(await dialog.locator("#stock-quantity").isEnabled(), true, "vuelve al formulario editable");
+    active.state.entryError = null; await dialog.locator("#stock-quantity").fill("2"); await dialog.getByRole("button", { name: "Continuar", exact: true }).click(); await dialog.locator(".stock-confirmation").waitFor();
+    await dialog.getByRole("button", { name: "Confirmar movimiento", exact: true }).click(); await page.locator(".stock-dialog[open]").waitFor({ state: "hidden" });
+    assert.equal(actionCalls.length, 2); assert.notEqual(ids()[0], ids()[1]); assert.equal(stockOf(), 5); assert.equal(active.state.tables.movimientos.length, 1); await page.close();
+  });
+
+  await t.test("ajuste físico sin cambios: sin solicitudId y con su mensaje anterior ante un fallo de red", async () => {
+    const page = await open(); const dialog = await openAction(page, "Ajustar"); await dialog.locator("#stock-quantity").fill("4"); await dialog.getByRole("button", { name: "Continuar", exact: true }).click(); await dialog.locator(".stock-adjustment").waitFor();
+    transportFails = true; await dialog.getByRole("button", { name: "Confirmar movimiento", exact: true }).click(); await dialog.getByRole("alert").waitFor();
+    assert.equal(await alertText(dialog), "No fue posible completar el movimiento. Inténtalo nuevamente."); assert.equal(actionCalls[0].solicitudId, undefined);
+    transportFails = false; await dialog.getByRole("button", { name: "Continuar", exact: true }).click(); await dialog.locator(".stock-adjustment").waitFor(); await dialog.getByRole("button", { name: "Confirmar movimiento", exact: true }).click(); await page.locator(".stock-dialog[open]").waitFor({ state: "hidden" }); assert.equal(stockOf(), 4); await page.close();
+  });
+
+  await t.test("UUID seguro sin crypto.randomUUID (origen HTTP por IP): alternativa con getRandomValues; sin ninguna fuente segura la operación se bloquea", async () => {
+    let page = await open(() => { Object.defineProperty(crypto, "randomUUID", { value: undefined, configurable: true }); });
+    let dialog = await openAction(page, "Agregar"); await submitFor(dialog, "entrada"); await page.locator(".stock-dialog[open]").waitFor({ state: "hidden" });
+    assert.match(ids()[0], V4); assert.equal(stockOf(), 10); await page.close();
+    page = await open(() => { Object.defineProperty(crypto, "randomUUID", { value: undefined, configurable: true }); Object.defineProperty(crypto, "getRandomValues", { value: undefined, configurable: true }); });
+    dialog = await openAction(page, "Agregar"); await submitFor(dialog, "entrada"); await dialog.getByRole("alert").waitFor();
+    assert.match(await alertText(dialog), /no puede generar identificadores seguros/); assert.equal(actionCalls.length, 0, "no se llamó a la acción"); assert.equal(stockOf(), 7); await page.close();
+  });
+
+  await t.test("errores específicos conocidos conservan su tratamiento (stock, conflicto, registro inexistente)", async () => {
+    const page = await open(); const dialog = await openAction(page, "Retirar"); await dialog.locator("#stock-quantity").fill("2");
     await dialog.getByRole("button", { name: "Continuar", exact: true }).click(); await dialog.locator(".stock-confirmation").waitFor();
     for (const [code, expected] of [["23514", "No hay stock suficiente."], ["40001", "El stock cambió."], ["23503", "El producto o la ubicación ya no existe."]]) {
       active.state.entryError = code; await dialog.getByRole("button", { name: "Confirmar movimiento", exact: true }).click(); await dialog.getByRole("alert").waitFor();
       const text = await alertText(dialog); assert.ok(text.startsWith(expected), `${code}: ${text}`); assert.notEqual(text, UNCERTAIN);
       await dialog.getByRole("button", { name: "Continuar", exact: true }).click(); await dialog.locator(".stock-confirmation").waitFor();
     }
-    active.state.entryError = null; assert.equal(stockOf(), 7, "ninguna escritura en los casos de error conocido"); assert.deepEqual(page.errors, []); await page.close();
+    active.state.entryError = null; assert.equal(stockOf(), 7, "ninguna escritura en los casos de error conocido"); assert.equal(active.state.tables.movimientos.length, 0); assert.deepEqual(page.errors, []); await page.close();
   });
 });

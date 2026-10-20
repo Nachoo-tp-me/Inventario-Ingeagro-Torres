@@ -76,11 +76,16 @@ export function createShelfFixture() {
   const insert = input => {
     state.writes.push(structuredClone(input));
     if (state.entryError) return { error: { code: state.entryError } };
+    if (state.insertErrorObject) return { error: state.insertErrorObject };
+    if ('solicitud_id' in input && state.schemaMismatch) return { error: { code: 'PGRST204', message: "Could not find the 'solicitud_id' column of 'movimientos' in the schema cache", details: null, hint: null } };
     if ([input.origen_compartimiento_id, input.destino_compartimiento_id].filter(Boolean).some(id => !state.tables.compartimientos.some(row => row.id === id))) return { error: { code: '23503' } };
+    if (input.solicitud_id && state.tables.movimientos.some(row => row.solicitud_id === input.solicitud_id))
+      return { error: { code: '23505', message: 'duplicate key value violates unique constraint "movimientos_solicitud_id_key"', details: 'Key (solicitud_id)=(' + input.solicitud_id + ') already exists.' } };
     const source = quantity(input.producto_id, input.origen_compartimiento_id);
     if (input.origen_compartimiento_id && source < input.cantidad) return { error: { code: '23514' } };
     if (input.origen_compartimiento_id) update(input.producto_id, input.origen_compartimiento_id, source - input.cantidad);
     if (input.destino_compartimiento_id) update(input.producto_id, input.destino_compartimiento_id, quantity(input.producto_id, input.destino_compartimiento_id) + input.cantidad);
+    if (input.solicitud_id) state.tables.movimientos.push({ id: state.tables.movimientos.length + 1, ...structuredClone(input), fecha: state.movementDate ?? '2026-10-20T13:30:00.000Z' });
     return { error: null };
   };
   state.client = {
@@ -94,7 +99,14 @@ export function createShelfFixture() {
         order(column, options) { query.orders.push([column, options?.ascending !== false]); return this; },
         range(start, end) { query.start = start; query.end = end; return this; },
         maybeSingle() { query.single = true; return this; },
-        async insert(input) { return insert(input); },
+        async insert(input) {
+          if (state.insertThrows) throw new Error('Synthetic insert exception');
+          // transportErrors: the request never reached the database (nothing is applied); loseResponses: it was applied, the answer was lost.
+          if (state.transportErrors > 0) { state.transportErrors--; return { error: { code: '', message: 'TypeError: fetch failed', details: '', hint: '' } }; }
+          const result = insert(input);
+          if (state.loseResponses > 0 && !result.error) { state.loseResponses--; return { error: { code: '', message: 'TypeError: fetch failed', details: '', hint: '' } }; }
+          return result;
+        },
         then(resolve, reject) {
           state.queries.push(structuredClone(query));
           if (state.nullTable === table) return Promise.resolve({ data: null, error: null }).then(resolve, reject);
@@ -152,5 +164,7 @@ export function createShelfFixture() {
   };
   const context = vm.createContext({ __fixture: state, console: { error() {} } });
   new vm.Script(bundle.outputFiles[0].text).runInContext(context);
-  return { state, ...context.shelves };
+  const raw = context.shelves.submitStockOperation;
+  const withId = input => input && typeof input === 'object' && input.tipo !== 'ajuste' && input.solicitudId === undefined ? { ...input, solicitudId: crypto.randomUUID() } : input;
+  return { state, ...context.shelves, submitStockOperation: input => raw(withId(input)), submitStockOperationRaw: raw };
 }

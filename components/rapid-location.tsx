@@ -6,10 +6,17 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, ArrowRight, Check, MapPin, Package, Plus, Search } from "lucide-react";
 import { submitStockOperation } from "@/app/(workspace)/stock-actions";
 import { ProductForm } from "@/components/product-form";
-import { StockOperationDialog, UNCERTAIN_MOVEMENT_MESSAGE } from "@/components/stock-operation";
+import { StockOperationDialog } from "@/components/stock-operation";
 import { rapidLocationHref, rememberRapidLocation, type RapidAdjacent, type RapidLocationContent } from "@/lib/rapid-navigation-model";
 import type { Category } from "@/lib/product-catalog";
 import { unitsLabel } from "@/lib/product-presentation";
+import {
+  ABANDON_UNCERTAIN_MESSAGE,
+  NO_SECURE_ID_MESSAGE,
+  UNCERTAIN_RETRY_MESSAGE,
+  createIdentityStore,
+  movementFingerprint,
+} from "@/lib/movement-request";
 import type { PhysicalLocationOption, ProductOption } from "@/lib/stock-model";
 import { parseQuantity, physicalLocationContext } from "@/lib/stock-model";
 import { searchLocationHref } from "@/lib/location-search-model";
@@ -35,6 +42,9 @@ export function RapidLocation({ current, adjacent, products, categories, compart
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
   const [quantityError, setQuantityError] = useState("");
+  // Request identity of the current entrada (memory only): reused for retries of an unconfirmed attempt, discarded otherwise.
+  const [identity] = useState(createIdentityStore);
+  const [uncertain, setUncertain] = useState(false);
   const [notice, setNotice] = useState("");
   const [adjust, setAdjust] = useState<{ id: string; stock: number } | null>(null);
   useEffect(() => {
@@ -68,16 +78,25 @@ export function RapidLocation({ current, adjacent, products, categories, compart
       document.getElementById("rapid-quantity")?.focus();
       return;
     }
+    const solicitudId = identity.acquire(movementFingerprint({ tipo: "entrada", productoId: selected.id, destinoId: current.id, cantidad: amount }));
+    if (!solicitudId) { setError(NO_SECURE_ID_MESSAGE); return; }
     busyRef.current = true; setPending(true); setError(""); setQuantityError("");
     try {
       const result = await submitStockOperation({ tipo: "entrada", productoId: selected.id,
-        destinoId: current.id, cantidad: amount });
-      if (!result.ok) { setError(result.message); return; }
-      setNotice(`${selected.nombre}: +${unitsLabel(amount)} ${amount === 1 ? "registrada" : "registradas"} en ${current.codigo}.`);
+        destinoId: current.id, cantidad: amount, solicitudId });
+      if (!result.ok) {
+        if (result.uncertain) { setUncertain(true); } else { identity.release(); setUncertain(false); }
+        setError(result.message);
+        return;
+      }
+      identity.release(); // success or deduplicated: this id can never be reused by the next entrada
+      setUncertain(false);
+      setNotice(result.duplicate ? result.message : `${selected.nombre}: +${unitsLabel(amount)} ${amount === 1 ? "registrada" : "registradas"} en ${current.codigo}.`);
       setMode("list"); setSelected(null); setQuantity(""); setQuery("");
       router.refresh();
     } catch {
-      setError(UNCERTAIN_MOVEMENT_MESSAGE);
+      setUncertain(true); // the id is kept: retrying the same entrada cannot duplicate it
+      setError(UNCERTAIN_RETRY_MESSAGE);
     } finally { busyRef.current = false; setPending(false); }
   }
 
@@ -137,15 +156,15 @@ export function RapidLocation({ current, adjacent, products, categories, compart
       <form onSubmit={save} noValidate>
         <div className="catalog-field"><label htmlFor="rapid-quantity">Cantidad</label>
           <div className="rapid-quantity-row">
-            <input id="rapid-quantity" type="text" inputMode="numeric" pattern="[0-9]*" value={quantity} onChange={(event) => { setQuantity(event.target.value); setError(""); setQuantityError(""); }} placeholder="Ej. 17" disabled={pending} autoFocus
+            <input id="rapid-quantity" type="text" inputMode="numeric" pattern="[0-9]*" value={quantity} onChange={(event) => { setQuantity(event.target.value); setError(""); setQuantityError(""); }} placeholder="Ej. 17" disabled={pending || uncertain} autoFocus
               aria-invalid={quantityError ? true : undefined}
               aria-describedby={[registered !== undefined && "rapid-registered", "rapid-quantity-unit", quantityError && "rapid-quantity-error"].filter(Boolean).join(" ")} />
             <span id="rapid-quantity-unit" className="rapid-unit">{parseQuantity(quantity) === 1 ? "unidad" : "unidades"}</span>
           </div>
           {quantityError && <p id="rapid-quantity-error" className="catalog-field-error" role="alert">{quantityError}</p>}
         </div>
-        {error && <p className="catalog-message error" role="alert">{error}</p>}
-        <div className="rapid-step-actions"><button type="button" className="catalog-quiet-button" onClick={() => setMode("select")} disabled={pending}>Cambiar producto</button><button type="submit" className="catalog-button primary" disabled={pending}>{pending ? "Guardando…" : `Guardar entrada en ${current.codigo}`}</button></div>
+        {error && <p className="catalog-message error" role="alert">{error}{uncertain && ` ${ABANDON_UNCERTAIN_MESSAGE}`}</p>}
+        <div className="rapid-step-actions"><button type="button" className="catalog-quiet-button" onClick={() => setMode("select")} disabled={pending || uncertain}>Cambiar producto</button><button type="submit" className="catalog-button primary" disabled={pending}>{pending ? "Guardando…" : `Guardar entrada en ${current.codigo}`}</button></div>
       </form>
     </section>}
 

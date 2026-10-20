@@ -65,10 +65,14 @@ function fixture() {
   };
   const context = vm.createContext({ __fixture: state, console: { error(...values) { state.logs.push(values); } } });
   new vm.Script(bundle.outputFiles[0].text).runInContext(context);
-  return { state, ...context.stock };
+  // C2b: entrada/retiro/traslado exigen solicitudId; los casos que no lo prueban reciben uno nuevo.
+  const raw = context.stock.submitStockOperation;
+  const withId = input => input && typeof input === "object" && input.tipo !== "ajuste" && input.solicitudId === undefined ? { ...input, solicitudId: crypto.randomUUID() } : input;
+  return { state, ...context.stock, submitStockOperation: input => raw(withId(input)), submitStockOperationRaw: raw };
 }
 
 const product = "00000000-0000-0000-0000-000000000501";
+const SOLICITUD = "6f1d2c3a-4b5e-4f60-8a71-92b3c4d5e6f7";
 const plain = value => JSON.parse(JSON.stringify(value));
 
 test("consultas autorizadas: 96 ubicaciones comunes y 72 exclusivas de torres", async () => {
@@ -110,7 +114,7 @@ test("acción real: siete operaciones conservan producto y IDs exactos", async t
   ];
   for (const { name, ...input } of scenarios) await t.test(name, async () => {
     const { state, submitStockOperation } = fixture();
-    assert.equal((await submitStockOperation({ ...input, productoId: product })).ok, true);
+    assert.equal((await submitStockOperation({ ...input, productoId: product, solicitudId: SOLICITUD.toUpperCase() })).ok, true);
     if (input.tipo === "ajuste") {
       assert.deepEqual(state.rpcs, [{ name: "registrar_ajuste_fisico", input: {
         p_producto_id: product, p_compartimiento_id: input.origenId,
@@ -118,7 +122,7 @@ test("acción real: siete operaciones conservan producto y IDs exactos", async t
       } }]);
       assert.equal(state.writes.length, 0);
     } else assert.deepEqual(state.writes, [{ table: "movimientos", input: {
-      producto_id: product, tipo: input.tipo, cantidad: input.cantidad,
+      solicitud_id: SOLICITUD, producto_id: product, tipo: input.tipo, cantidad: input.cantidad,
       origen_compartimiento_id: input.origenId ?? null, destino_compartimiento_id: input.destinoId ?? null,
     } }]);
     assert.equal(state.authCalls, 1);

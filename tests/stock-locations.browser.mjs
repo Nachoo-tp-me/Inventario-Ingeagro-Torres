@@ -18,6 +18,13 @@ const { build } = requireTools("esbuild");
 const { chromium } = requireTools("playwright");
 const product = "00000000-0000-0000-0000-000000000501";
 
+// C2b: cada entrada/retiro/traslado envía un solicitudId UUID v4 (el ajuste no); se comprueba y se retira para comparar el resto.
+const V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+async function submissions(page) {
+  const sent = await page.evaluate(() => window.__submissions);
+  for (const input of sent) { if (input.tipo === "ajuste") assert.equal(input.solicitudId, undefined); else assert.match(input.solicitudId, V4); }
+  return sent.map(({ solicitudId, ...rest }) => rest);
+}
 test("stock común: formularios reales y asociaciones de cajas/torres, ambos temas", async t => {
   const bundle = await build({
     stdin: { resolveDir: root, loader: "tsx", contents: `
@@ -102,7 +109,7 @@ test("stock común: formularios reales y asociaciones de cajas/torres, ambos tem
         }
         await dialog.waitFor({ state: 'hidden' });
         expected.push({ origenId: undefined, destinoId: undefined, ...input, productoId: product });
-        assert.deepEqual(await page.evaluate(() => window.__submissions), expected);
+        assert.deepEqual(await submissions(page), expected);
       }
       async function openRow(index, name) {
         await rows.nth(index).getByRole('button', { name: 'Acciones', exact: true }).click();
@@ -156,7 +163,7 @@ test("stock común: formularios reales y asociaciones de cajas/torres, ambos tem
         await page.keyboard.press('Escape');
         await dialog.waitFor({ state: 'hidden' });
       }
-      assert.deepEqual(await page.evaluate(() => window.__submissions), expected);
+      assert.deepEqual(await submissions(page), expected);
       assert.equal(await page.evaluate(() => window.__refreshes), 7);
       // Destino caja desde el diálogo modal de un compartimiento real.
       await page.locator('#compartment').click();

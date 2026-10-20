@@ -6,11 +6,25 @@ import {
   validateStockOperation,
   type StockOperationInput,
 } from "@/lib/stock-model";
+import { classifyWriteError } from "@/lib/product-save-model";
+import {
+  ALREADY_REGISTERED_MESSAGE,
+  INVALID_REQUEST_MESSAGE,
+  REUSED_REQUEST_MESSAGE,
+  SCHEMA_MISMATCH_MESSAGE,
+  UNCERTAIN_RETRY_MESSAGE,
+  formatMovementDate,
+  normalizeSolicitudId,
+} from "@/lib/movement-request";
 
 export type StockActionResult = {
   ok: boolean;
   message: string;
   noChange?: boolean;
+  /** The movement may or may not have been recorded: the caller keeps the request id and may retry it. */
+  uncertain?: boolean;
+  /** The same request had already been recorded (deduplicated); nothing was applied twice. */
+  duplicate?: boolean;
 };
 
 function friendlyStockError(code?: string): string {
@@ -30,14 +44,40 @@ function invalidateStockView(path: string, type?: "page") {
   }
 }
 
+type Supabase = Awaited<ReturnType<typeof requireAuthorizedUser>>;
+const UNCERTAIN: StockActionResult = { ok: false, uncertain: true, message: UNCERTAIN_RETRY_MESSAGE };
+
+// Compares the stored movement of a repeated request with what this request asks for, field by field.
+async function resolveDuplicate(supabase: Supabase, solicitudId: string, input: StockOperationInput): Promise<StockActionResult | { same: true; when: string | null }> {
+  const { data, error } = await supabase.from("movimientos")
+    .select("producto_id,tipo,cantidad,origen_compartimiento_id,destino_compartimiento_id,fecha")
+    .eq("solicitud_id", solicitudId).maybeSingle();
+  if (error || !data) {
+    console.error("No se pudo comprobar un movimiento repetido", { code: error?.code ?? "sin-fila" });
+    return UNCERTAIN; // never success without proof
+  }
+  const origen = input.tipo === "retiro" || input.tipo === "traslado" ? input.origenId ?? null : null;
+  const destino = input.tipo === "entrada" || input.tipo === "traslado" ? input.destinoId ?? null : null;
+  const same = data.producto_id === input.productoId && data.tipo === input.tipo && data.cantidad === input.cantidad &&
+    (data.origen_compartimiento_id ?? null) === origen && (data.destino_compartimiento_id ?? null) === destino;
+  if (!same) return { ok: false, message: REUSED_REQUEST_MESSAGE };
+  const when = typeof data.fecha === "string" ? formatMovementDate(data.fecha) : null;
+  return { same: true, when };
+}
+
 export async function submitStockOperation(input: StockOperationInput): Promise<StockActionResult> {
   const supabase = await requireAuthorizedUser();
   if (!input || typeof input !== "object")
     return { ok: false, message: "Revisa los datos del movimiento." };
   const validationError = validateStockOperation(input);
   if (validationError) return { ok: false, message: validationError };
+  // V2 entrada/retiro/traslado always carry a request id: the database refuses a second movement with the same id.
+  const solicitudId = input.tipo === "ajuste" ? null : normalizeSolicitudId(input.solicitudId);
+  if (input.tipo !== "ajuste" && !solicitudId) return { ok: false, message: INVALID_REQUEST_MESSAGE };
 
   let noChange = false;
+  let duplicate = false;
+  let registeredWhen: string | null = null;
   try {
     if (input.tipo === "ajuste") {
       const { data, error } = await supabase.rpc("registrar_ajuste_fisico", {
@@ -53,6 +93,7 @@ export async function submitStockOperation(input: StockOperationInput): Promise<
       noChange = data === null;
     } else {
       const { error } = await supabase.from("movimientos").insert({
+        solicitud_id: solicitudId,
         producto_id: input.productoId,
         tipo: input.tipo,
         cantidad: input.cantidad!,
@@ -62,14 +103,31 @@ export async function submitStockOperation(input: StockOperationInput): Promise<
           ? input.destinoId : null,
       });
       if (error) {
-        console.error("No se pudo registrar el movimiento", { code: error.code });
-        return { ok: false, message: friendlyStockError(error.code) };
+        const code = typeof error.code === "string" ? error.code : "";
+        console.error("No se pudo registrar el movimiento", { code: code || "sin-codigo" });
+        if (code === "23505") {
+          // Only the request-id constraint may mean "already recorded", and only after reading the stored movement back.
+          const text = `${error.message ?? ""} ${error.details ?? ""}`;
+          if (text.trim() && !/solicitud_id/.test(text)) return { ok: false, message: friendlyStockError(code) };
+          const resolved = await resolveDuplicate(supabase, solicitudId!, input);
+          if (!("same" in resolved)) return resolved;
+          duplicate = true;
+          registeredWhen = resolved.when;
+        } else if (code === "PGRST204" || (code === "42703" && /solicitud_id/.test(`${error.message ?? ""}`))) {
+          // The database has not been migrated yet: a schema incompatibility, never a reason to retry or to drop idempotency.
+          return { ok: false, message: SCHEMA_MISMATCH_MESSAGE };
+        } else if (classifyWriteError(error) === "definitive") {
+          return { ok: false, message: friendlyStockError(code) };
+        } else {
+          return UNCERTAIN; // no code / transport / unknown: it may have been recorded
+        }
       }
     }
-
   } catch {
     console.error("Fallo inesperado al registrar movimiento");
-    return { ok: false, message: "No fue posible completar el movimiento. Inténtalo nuevamente." };
+    return input.tipo === "ajuste"
+      ? { ok: false, message: "No fue posible completar el movimiento. Inténtalo nuevamente." }
+      : UNCERTAIN;
   }
 
   invalidateStockView("/");
@@ -105,6 +163,9 @@ export async function submitStockOperation(input: StockOperationInput): Promise<
   return {
     ok: true,
     noChange,
-    message: noChange ? "El stock ya coincide con el conteo físico. No se registró un movimiento." : "Movimiento registrado correctamente.",
+    ...(duplicate ? { duplicate: true } : {}),
+    message: duplicate
+      ? (registeredWhen ? `${ALREADY_REGISTERED_MESSAGE} Registrado el ${registeredWhen}.` : ALREADY_REGISTERED_MESSAGE)
+      : noChange ? "El stock ya coincide con el conteo físico. No se registró un movimiento." : "Movimiento registrado correctamente.",
   };
 }

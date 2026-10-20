@@ -115,7 +115,8 @@ test("Bloques 1/2/4: migraciones, stock, códigos, RLS y concurrencia en Postgre
     const expansion = ["20261014000000_physical_locations_and_code_registry.sql", "20261014010000_movement_location_code_snapshots.sql"];
     const renaming = "20261014020000_authorized_box_code_rename.sql";
     for (const migration of [...expansion, renaming]) assert.ok(migrations.includes(migration));
-    const previous = migrations.filter(name => !expansion.includes(name) && name !== renaming);
+    const later = migrations.filter(name => name > renaming); // posteriores al Bloque 4 (p. ej. idempotencia C2b): se aplican al final
+    const previous = migrations.filter(name => !expansion.includes(name) && name !== renaming && !later.includes(name));
 
     // Dos bases nuevas independientes prueban reproducibilidad, no reejecución
     // artificial de una migración ya aplicada.
@@ -157,6 +158,7 @@ test("Bloques 1/2/4: migraciones, stock, códigos, RLS y concurrencia en Postgre
           t.diagnostic("PASS rollback de función y permisos del Bloque 4 ante fallo de migración");
         }
         await sqlFile(database, "supabase/migrations/" + renaming);
+        for (const migration of later) await sqlFile(database, "supabase/migrations/" + migration);
         t.diagnostic(sql(database, "select version();"));
       });
       await t.test(`${database}: escenario 96, restricciones y seguridad`, async () => {
@@ -277,7 +279,7 @@ test("Bloques 1/2/4: migraciones, stock, códigos, RLS y concurrencia en Postgre
     });
     await t.test("conservación final de filas anteriores y consistencia de códigos", () => {
       assert.equal(sql(database, `select count(*) from test_support.movimientos_antes b join public.movimientos m using(id)
-        where to_jsonb(b)=to_jsonb(m)-'codigo_origen'-'codigo_destino';`), "2");
+        where to_jsonb(b)=to_jsonb(m)-'codigo_origen'-'codigo_destino'-'solicitud_id';`), "2");
       assert.equal(sql(database, `select count(*) from test_support.inventario_antes b join public.inventario i using(producto_id,compartimiento_id)
         where b.cantidad=i.cantidad;`), "2");
       assert.equal(sql(database, `select count(*) from public.compartimientos c left join public.ubicacion_codigos r
