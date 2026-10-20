@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { CheckCircle2, ImagePlus, Package, Plus, Trash2 } from "lucide-react";
+import { CheckCircle2, ImagePlus, Package, Trash2 } from "lucide-react";
 import { createSupabaseClient } from "@/lib/supabase/client";
 import type { Product } from "@/lib/product-catalog";
 import {
@@ -338,14 +338,71 @@ export function ProductForm({
     }
   }
 
+  const descriptionField = (
+      <label className="catalog-field" htmlFor="product-description">
+        <span>Descripción <small>Opcional</small></span>
+        <textarea
+          id="product-description"
+          value={descripcion}
+          onChange={(event) => setDescripcion(event.target.value)}
+          maxLength={PRODUCT_DESCRIPTION_MAX}
+          rows={5}
+          placeholder="Detalles que ayuden a identificarlo"
+          disabled={pending || !!savedId}
+        />
+      </label>
+  );
+
+  const photoSection = (
+    <div className="catalog-form-section">
+      <h2>Fotografía</h2>
+      <p>JPG, PNG o WebP · hasta 5 MB.</p>
+      <div className="catalog-photo-editor">
+        <div className="catalog-photo-preview">
+          {currentPhoto ? (
+            // URL local temporal o firmada del bucket privado.
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={currentPhoto} alt="Vista previa del producto" />
+          ) : <Package size={44} aria-hidden="true" />}
+        </div>
+        <div className="catalog-photo-controls">
+          <label className="catalog-file-button" htmlFor="product-photo">
+            <ImagePlus size={18} aria-hidden="true" />
+            {currentPhoto ? "Reemplazar foto" : "Añadir foto"}
+          </label>
+          <input
+            key={fileInputKey}
+            id="product-photo"
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            onChange={(event) => chooseFile(event.target.files?.[0])}
+            disabled={pending || !!savedId}
+          />
+          {currentPhoto && (
+            <button type="button" className="catalog-quiet-button" disabled={pending || !!savedId} onClick={() => {
+              setFile(null);
+              setPreviewUrl(null);
+              setFileInputKey((key) => key + 1);
+              setRemovePhoto(true);
+            }}><Trash2 size={16} aria-hidden="true" /> Quitar foto</button>
+          )}
+          <span>La fotografía es opcional.</span>
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <div className={quick ? "catalog-form-layout quick" : "catalog-form-layout"}>
-      <form ref={formRef} className="catalog-form" onSubmit={save} noValidate>
+      <form ref={formRef} className={quick ? "catalog-form" : "catalog-form catalog-form-split"} onSubmit={save} noValidate>
         <div className="catalog-form-section">
           <h2>Datos del producto</h2>
           <p>La foto y la descripción se pueden completar después.</p>
+          {!quick && <p className="catalog-form-note">{initial
+            ? "Aquí editas los datos del producto. Para cambiar sus existencias usa «Agregar stock» o «Acciones» en su ficha."
+            : "Esto crea el producto en el catálogo. Sus existencias se agregan después con «Agregar stock» en su ficha."}</p>}
           <label className="catalog-field" htmlFor="product-name">
-            <span>Nombre <b>*</b></span>
+            <span>Nombre {quick ? <b>*</b> : <small className="catalog-required">Obligatorio</small>}</span>
             <input
               id="product-name"
               value={nombre}
@@ -358,7 +415,7 @@ export function ProductForm({
             />
           </label>
           <label className="catalog-field" htmlFor="product-category">
-            <span>Categoría <b>*</b></span>
+            <span>Categoría {quick ? <b>*</b> : <small className="catalog-required">Obligatorio</small>}</span>
             <select
               id="product-category"
               value={categoriaId}
@@ -399,57 +456,22 @@ export function ProductForm({
           )}
         </div>
 
-        <details className={quick ? "quick-more-details compact" : "quick-more-details"} open={!quick}>
+        {quick ? (
+          <details className="quick-more-details compact" open={false}>
           <summary>Más detalles (opcional)</summary>
-          <label className="catalog-field" htmlFor="product-description">
-            <span>Descripción <small>Opcional</small></span>
-            <textarea
-              id="product-description"
-              value={descripcion}
-              onChange={(event) => setDescripcion(event.target.value)}
-              maxLength={PRODUCT_DESCRIPTION_MAX}
-              rows={5}
-              placeholder="Detalles que ayuden a identificarlo"
-              disabled={pending || !!savedId}
-            />
-          </label>
-        <div className="catalog-form-section">
-          <h2>Fotografía</h2>
-          <p>JPG, PNG o WebP · hasta 5 MB.</p>
-          <div className="catalog-photo-editor">
-            <div className="catalog-photo-preview">
-              {currentPhoto ? (
-                // URL local temporal o firmada del bucket privado.
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={currentPhoto} alt="Vista previa del producto" />
-              ) : <Package size={44} aria-hidden="true" />}
+            {descriptionField}
+            {photoSection}
+          </details>
+        ) : (
+          <>
+            <div className="catalog-form-section">
+              <h2>Descripción</h2>
+              <p>Opcional: detalles que ayuden a identificar el producto.</p>
+              {descriptionField}
             </div>
-            <div className="catalog-photo-controls">
-              <label className="catalog-file-button" htmlFor="product-photo">
-                <ImagePlus size={18} aria-hidden="true" />
-                {currentPhoto ? "Reemplazar foto" : "Añadir foto"}
-              </label>
-              <input
-                key={fileInputKey}
-                id="product-photo"
-                type="file"
-                accept="image/jpeg,image/png,image/webp"
-                onChange={(event) => chooseFile(event.target.files?.[0])}
-                disabled={pending || !!savedId}
-              />
-              {currentPhoto && (
-                <button type="button" className="catalog-quiet-button" disabled={pending || !!savedId} onClick={() => {
-                  setFile(null);
-                  setPreviewUrl(null);
-                  setFileInputKey((key) => key + 1);
-                  setRemovePhoto(true);
-                }}><Trash2 size={16} aria-hidden="true" /> Quitar foto</button>
-              )}
-              <span>La fotografía es opcional.</span>
-            </div>
-          </div>
-        </div>
-        </details>
+            {photoSection}
+          </>
+        )}
 
         {similar.length > 0 && <div className="similar-warning" role="alert">
           <strong>Encontramos productos parecidos</strong>
@@ -476,16 +498,11 @@ export function ProductForm({
         <div className="catalog-form-actions">
           {onCancel ? <button type="button" onClick={onCancel} className="catalog-quiet-button" disabled={pending}>Cancelar</button> : <Link href={initial ? `/productos/${initial.id}` : "/productos"} className="catalog-quiet-button">Cancelar</Link>}
           <button type="submit" className="catalog-button primary" disabled={pending || !!cleanupPath || !!savedId}>
-            {pending ? stage : initial ? "Guardar cambios" : "Agregar producto"}
+            {pending ? stage : initial ? "Guardar cambios" : quick ? "Agregar producto" : "Crear producto"}
           </button>
         </div>
       </form>
       <form id="category-form" onSubmit={addCategory} className="catalog-hidden-form" />
-      {!quick && <aside className="catalog-form-aside">
-        <span className="catalog-aside-icon"><Plus size={23} aria-hidden="true" /></span>
-        <h2>Un catálogo claro para todo el equipo</h2>
-        <p>Registra el producto una sola vez. Sus existencias y ubicaciones aparecerán aquí cuando se asignen movimientos de inventario.</p>
-      </aside>}
     </div>
   );
 }
