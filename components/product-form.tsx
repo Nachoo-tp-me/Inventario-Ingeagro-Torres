@@ -18,6 +18,7 @@ import {
 } from "@/lib/product-validation";
 import { fieldErrorOfProduct, type ProductFieldName } from "@/lib/product-form-model";
 import { similarProducts } from "@/lib/rapid-model";
+import { classifyWriteError, removalDecision, writeVerdict, type IntendedProduct, type ProductRow, type ReadBack } from "@/lib/product-save-model";
 
 type ExistingProduct = { id: string; nombre: string; categoria: string; nombre_normalizado?: string };
 
@@ -26,6 +27,15 @@ const IMAGE_EXTENSIONS: Record<string, string> = {
   "image/png": "png",
   "image/webp": "webp",
 };
+
+type Supabase = ReturnType<typeof createSupabaseClient>;
+// Identity of one logical save: kept across retries after an unconfirmed write, so nothing is generated or uploaded twice.
+type Attempt = { kind: "create" | "update"; productId: string; uploadedPath: string | null; values: IntendedProduct };
+
+const UNCERTAIN_UNVERIFIED = "No pudimos confirmar si el producto se guardó. Tus datos y la fotografía subida se conservaron; no se eliminó ningún archivo.";
+const UNCERTAIN_NOT_YET = "Aún no vemos el guardado. Tus datos y la fotografía subida se conservaron. Comprueba de nuevo en unos segundos o reintenta el guardado.";
+const UNCERTAIN_CONFLICT = "El producto cambió en otra sesión y no pudimos confirmar tu guardado anterior. No se eliminó ninguna fotografía. Recarga la página antes de editarlo.";
+const UNCERTAIN_AFTER_REJECTION = "El servidor rechazó el reintento, pero un intento anterior no confirmado podría haberse guardado. No se eliminó ningún archivo.";
 
 type ErrorField = ProductFieldName | "foto";
 const FIELD_IDS: Record<ErrorField, string> = { nombre: "product-name", categoria: "product-category", descripcion: "product-description", foto: "product-photo" };
@@ -70,6 +80,10 @@ export function ProductForm({
   const [notice, setNotice] = useState("");
   const [cleanupPath, setCleanupPath] = useState<string | null>(null);
   const [savedId, setSavedId] = useState<string | null>(null);
+  const [uncertain, setUncertain] = useState(false);
+  const uncertainRef = useRef<Attempt | null>(null);
+  const completedRef = useRef(false);
+  const cleanupOwnerRef = useRef<string | null>(null);
   const [similar, setSimilar] = useState<ExistingProduct[]>([]);
   const [fieldError, setFieldError] = useState<{ field: ErrorField; message: string } | null>(null);
   const previewRef = useRef<HTMLImageElement>(null);
@@ -189,21 +203,51 @@ export function ProductForm({
     setRemovePhoto(false);
   }
 
+  async function readBack(supabase: Supabase, productId: string): Promise<ReadBack> {
+    try {
+      const { data, error: readError } = await supabase.from("productos")
+        .select("id,nombre,categoria_id,descripcion,foto_ruta,actualizado_en").eq("id", productId).maybeSingle();
+      if (readError) return { status: "failed" };
+      return data ? { status: "row", row: data as ProductRow } : { status: "absent" };
+    } catch {
+      return { status: "failed" };
+    }
+  }
+
+  // The ONLY way this form deletes a file it uploaded or replaced: with positive evidence (a fresh read) that no product
+  // row references it. Any doubt keeps the file; an orphan is preferable to a broken reference.
+  async function removeUnreferenced(supabase: Supabase, productId: string, path: string): Promise<"removed" | "referenced" | "unverified" | "failed"> {
+    const decision = removalDecision(await readBack(supabase, productId), path);
+    if (decision === "keep-referenced") return "referenced";
+    if (decision === "keep-unverified") return "unverified";
+    try {
+      const { error: removeError } = await supabase.storage.from(PRODUCT_IMAGE_BUCKET).remove([path]);
+      return removeError ? "failed" : "removed";
+    } catch {
+      return "failed";
+    }
+  }
+
   async function retryCleanup() {
     if (!cleanupPath || pending) return;
     setPending(true);
     setStage("Eliminando fotografía anterior…");
     try {
-      const { error: removeError } = await createSupabaseClient()
-        .storage.from(PRODUCT_IMAGE_BUCKET).remove([cleanupPath]);
-      if (removeError) throw removeError;
+      const owner = cleanupOwnerRef.current ?? initial?.id ?? savedId;
+      const result = owner ? await removeUnreferenced(createSupabaseClient(), owner, cleanupPath) : "unverified";
+      if (result === "unverified" || result === "failed") {
+        setError(result === "unverified"
+          ? "No pudimos comprobar si la fotografía está en uso, así que no se eliminó. Vuelve a intentarlo."
+          : "No pudimos eliminar el archivo. Vuelve a intentarlo.");
+        return;
+      }
       setCleanupPath(null);
       setError("");
       if (savedId) {
         router.push(`/productos/${savedId}?guardado=1`);
         router.refresh();
       } else {
-        setNotice("Archivo temporal eliminado. Puedes guardar de nuevo.");
+        setNotice(result === "referenced" ? "La fotografía está en uso por el producto; no se eliminó." : "Archivo temporal eliminado. Puedes guardar de nuevo.");
       }
     } catch {
       setError("No pudimos eliminar el archivo. Vuelve a intentarlo.");
@@ -213,9 +257,84 @@ export function ProductForm({
     }
   }
 
+  // The write is confirmed (response received, or proven by reading the row again): continue the existing success flow once.
+  async function finishSuccess(supabase: Supabase, attempt: Attempt) {
+    completedRef.current = true;
+    uncertainRef.current = null;
+    setUncertain(false);
+    const previousPhoto = initial?.foto_ruta;
+    if (previousPhoto && previousPhoto !== attempt.values.foto_ruta) {
+      setStage("Eliminando fotografía anterior…");
+      const result = await removeUnreferenced(supabase, attempt.productId, previousPhoto);
+      if (result === "unverified" || result === "failed") {
+        setSavedId(attempt.productId);
+        setCleanupPath(previousPhoto);
+        cleanupOwnerRef.current = attempt.productId;
+        setNotice("Producto guardado. Falta eliminar la fotografía anterior.");
+        return;
+      }
+    }
+    if (onCreated && !initial) onCreated({ id: attempt.productId, nombre: attempt.values.nombre,
+      categoria: categories.find((item) => item.id === attempt.values.categoria_id)?.nombre ?? "Sin categoría" });
+    else { router.push(`/productos/${attempt.productId}?guardado=1`); router.refresh(); }
+  }
+
+  // Unconfirmed write: keep the identity (product id, uploaded path, values) and every file; verify by reading the row.
+  async function resolveUncertain(supabase: Supabase, attempt: Attempt, afterRejection: boolean) {
+    uncertainRef.current = attempt;
+    setUncertain(true);
+    const verdict = writeVerdict(attempt.kind, await readBack(supabase, attempt.productId), attempt.values, initial?.actualizado_en);
+    if (verdict === "applied") { await finishSuccess(supabase, attempt); return; }
+    setError(afterRejection ? UNCERTAIN_AFTER_REJECTION : verdict === "not-applied" ? UNCERTAIN_NOT_YET : verdict === "conflict" ? UNCERTAIN_CONFLICT : UNCERTAIN_UNVERIFIED);
+  }
+
+  async function checkSaved() {
+    const attempt = uncertainRef.current;
+    if (!attempt || pending || busyRef.current) return;
+    busyRef.current = true;
+    setPending(true);
+    setStage("Comprobando si se guardó…");
+    setError("");
+    setNotice("");
+    try {
+      const supabase = createSupabaseClient();
+      const verdict = writeVerdict(attempt.kind, await readBack(supabase, attempt.productId), attempt.values, initial?.actualizado_en);
+      if (verdict === "applied") await finishSuccess(supabase, attempt);
+      else setError(verdict === "not-applied" ? UNCERTAIN_NOT_YET : verdict === "conflict" ? UNCERTAIN_CONFLICT : UNCERTAIN_UNVERIFIED);
+    } finally {
+      busyRef.current = false;
+      setPending(false);
+      setStage("");
+    }
+  }
+
+  // One statement: ok, rejected by the database (proves it was not applied) or uncertain (no way to know).
+  async function writeProduct(supabase: Supabase, attempt: Attempt): Promise<{ state: "ok" } | { state: "rejected"; noRows: boolean } | { state: "uncertain" }> {
+    setStage(initial ? "Guardando cambios…" : "Guardando producto…");
+    try {
+      if (attempt.kind === "update" && initial) {
+        const { data, error: updateError } = await supabase
+          .from("productos")
+          .update(attempt.values)
+          .eq("id", initial.id)
+          .eq("actualizado_en", initial.actualizado_en)
+          .select("id")
+          .maybeSingle();
+        if (updateError) return classifyWriteError(updateError) === "definitive" ? { state: "rejected", noRows: false } : { state: "uncertain" };
+        return data ? { state: "ok" } : { state: "rejected", noRows: true };
+      }
+      const { error: insertError } = await supabase.from("productos").insert({ id: attempt.productId, ...attempt.values });
+      if (insertError) return classifyWriteError(insertError) === "definitive" ? { state: "rejected", noRows: false } : { state: "uncertain" };
+      return { state: "ok" };
+    } catch {
+      return { state: "uncertain" };
+    }
+  }
+
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (pending || busyRef.current || checkingRef.current || cleanupPath || savedId) return;
+    if (pending || busyRef.current || checkingRef.current || cleanupPath || savedId || completedRef.current) return;
+    const retrying = uncertainRef.current;
     const validationError = validateProduct(
       nombre,
       categoriaId,
@@ -233,7 +352,7 @@ export function ProductForm({
         return;
       }
     }
-    if (!initial && approvedNameRef.current !== nombre) {
+    if (!initial && !retrying && approvedNameRef.current !== nombre) {
       checkingRef.current = true;
       setPending(true);
       setStage("Comprobando productos parecidos…");
@@ -269,101 +388,76 @@ export function ProductForm({
     setError("");
     setNotice("");
     const supabase = createSupabaseClient();
-    const productId = initial?.id ?? crypto.randomUUID();
     let uploadedPath: string | null = null;
-    let saved = false;
+    let attempt: Attempt | null = retrying;
+    let written = false;
     try {
-      if (file) {
-        setStage("Subiendo fotografía…");
-        uploadedPath = `${productId}/${crypto.randomUUID()}.${IMAGE_EXTENSIONS[file.type]}`;
-        const { error: uploadError } = await supabase.storage
-          .from(PRODUCT_IMAGE_BUCKET)
-          .upload(uploadedPath, file, {
-            contentType: file.type,
-            cacheControl: "3600",
-            upsert: false,
-          });
-        if (uploadError) {
-          setError("No pudimos subir la fotografía. Comprueba tu conexión e inténtalo de nuevo.");
-          return;
-        }
-      }
-      setStage(initial ? "Guardando cambios…" : "Guardando producto…");
-      const values = {
-        nombre,
-        categoria_id: categoriaId,
-        descripcion: descripcion.trim() ? descripcion : null,
-        foto_ruta: uploadedPath ?? (removePhoto ? null : initial?.foto_ruta ?? null),
-      };
-      if (initial) {
-        const { data, error: updateError } = await supabase
-          .from("productos")
-          .update(values)
-          .eq("id", initial.id)
-          .eq("actualizado_en", initial.actualizado_en)
-          .select("id")
-          .maybeSingle();
-        if (updateError || !data) {
-          if (uploadedPath) {
-            const { error: cleanupError } = await supabase.storage
-              .from(PRODUCT_IMAGE_BUCKET).remove([uploadedPath]);
-            if (cleanupError) setCleanupPath(uploadedPath);
+      if (!attempt) {
+        // A retry after an unconfirmed write reuses the product id and the uploaded path: nothing is generated or uploaded again.
+        const productId = initial?.id ?? crypto.randomUUID();
+        if (file) {
+          setStage("Subiendo fotografía…");
+          uploadedPath = `${productId}/${crypto.randomUUID()}.${IMAGE_EXTENSIONS[file.type]}`;
+          const { error: uploadError } = await supabase.storage
+            .from(PRODUCT_IMAGE_BUCKET)
+            .upload(uploadedPath, file, {
+              contentType: file.type,
+              cacheControl: "3600",
+              upsert: false,
+            });
+          if (uploadError) {
+            setError("No pudimos subir la fotografía. Comprueba tu conexión e inténtalo de nuevo.");
+            return;
           }
-          setError(
-            updateError
-              ? "No pudimos guardar los cambios. Inténtalo de nuevo."
-              : "El producto cambió en otra sesión. Recarga la página antes de editarlo.",
-          );
-          return;
         }
-        saved = true;
-      } else {
-        const { error: insertError } = await supabase
-          .from("productos")
-          .insert({ id: productId, ...values });
-        if (insertError) {
-          if (uploadedPath) {
-            const { error: cleanupError } = await supabase.storage
-              .from(PRODUCT_IMAGE_BUCKET).remove([uploadedPath]);
-            if (cleanupError) setCleanupPath(uploadedPath);
-          }
-          setError("No pudimos guardar el producto. Revisa los datos e inténtalo de nuevo.");
-          return;
-        }
-        saved = true;
+        attempt = {
+          kind: initial ? "update" : "create",
+          productId,
+          uploadedPath,
+          values: {
+            nombre,
+            categoria_id: categoriaId,
+            descripcion: descripcion.trim() ? descripcion : null,
+            foto_ruta: uploadedPath ?? (removePhoto ? null : initial?.foto_ruta ?? null),
+          },
+        };
       }
-
-      const previousPhoto = initial?.foto_ruta;
-      if (previousPhoto && previousPhoto !== values.foto_ruta) {
-        setStage("Eliminando fotografía anterior…");
-        const { error: removeError } = await supabase.storage
-          .from(PRODUCT_IMAGE_BUCKET).remove([previousPhoto]);
-        if (removeError) {
-          setSavedId(productId);
-          setCleanupPath(previousPhoto);
-          setNotice("Producto guardado. Falta eliminar la fotografía anterior.");
-          return;
+      written = true;
+      const outcome = await writeProduct(supabase, attempt);
+      if (outcome.state === "ok") { await finishSuccess(supabase, attempt); return; }
+      if (outcome.state === "uncertain" || retrying) { await resolveUncertain(supabase, attempt, outcome.state === "rejected"); return; }
+      // First attempt rejected by the database: the statement was not applied. Still, a file is deleted only with proof.
+      if (attempt.uploadedPath) {
+        const result = await removeUnreferenced(supabase, attempt.productId, attempt.uploadedPath);
+        if (result === "referenced") { await finishSuccess(supabase, attempt); return; }
+        if (result === "unverified" || result === "failed") {
+          setCleanupPath(attempt.uploadedPath);
+          cleanupOwnerRef.current = attempt.productId;
         }
       }
-      if (onCreated && !initial) onCreated({ id: productId, nombre,
-        categoria: categories.find((item) => item.id === categoriaId)?.nombre ?? "Sin categoría" });
-      else { router.push(`/productos/${productId}?guardado=1`); router.refresh(); }
+      setError(outcome.noRows
+        ? "El producto cambió en otra sesión. Recarga la página antes de editarlo."
+        : initial
+          ? "No pudimos guardar los cambios. Inténtalo de nuevo."
+          : "No pudimos guardar el producto. Revisa los datos e inténtalo de nuevo.");
     } catch {
-      if (saved) {
-        setSavedId(productId);
-        setNotice("Producto guardado. Comprueba que se eliminó la fotografía anterior.");
-        if (initial?.foto_ruta && (uploadedPath || removePhoto))
-          setCleanupPath(initial.foto_ruta);
-      } else if (uploadedPath) {
-        try {
-          const { error: cleanupError } = await supabase.storage
-            .from(PRODUCT_IMAGE_BUCKET).remove([uploadedPath]);
-          if (cleanupError) setCleanupPath(uploadedPath);
-        } catch {
-          setCleanupPath(uploadedPath);
+      if (!written) {
+        // Nothing was written (the upload threw): remove the temporary file only with proof that it is unreferenced.
+        if (uploadedPath) {
+          const result = await removeUnreferenced(supabase, initial?.id ?? uploadedPath.split("/")[0], uploadedPath);
+          if (result === "unverified" || result === "failed") {
+            setCleanupPath(uploadedPath);
+            cleanupOwnerRef.current = initial?.id ?? uploadedPath.split("/")[0];
+          }
         }
+        setError("Ocurrió un problema de conexión. Inténtalo de nuevo.");
+      } else if (attempt && !completedRef.current) {
+        uncertainRef.current = attempt;
+        setUncertain(true);
+        setError(UNCERTAIN_UNVERIFIED);
+      } else {
+        setError("La operación terminó con un aviso inesperado. Comprueba el producto antes de reintentar.");
       }
-      setError(saved ? "La actualización se guardó, pero falta comprobar la limpieza de la foto." : "Ocurrió un problema de conexión. Inténtalo de nuevo.");
     } finally {
       busyRef.current = false;
       setPending(false);
@@ -371,6 +465,7 @@ export function ProductForm({
     }
   }
 
+  const locked = !!savedId || uncertain;
   const inlineField = fieldError && fieldError.message === error ? fieldError.field : null;
   const globalError = inlineField ? "" : error;
   const invalidProps = (field: ErrorField) => inlineField === field
@@ -391,7 +486,7 @@ export function ProductForm({
           maxLength={PRODUCT_DESCRIPTION_MAX}
           rows={5}
           placeholder="Detalles que ayuden a identificarlo"
-          disabled={pending || !!savedId}
+          disabled={pending || locked}
           {...invalidProps("descripcion")}
         />
       </label>
@@ -424,12 +519,12 @@ export function ProductForm({
             type="file"
             accept="image/jpeg,image/png,image/webp"
             onChange={(event) => chooseFile(event.target.files?.[0])}
-            disabled={pending || !!savedId}
+            disabled={pending || locked}
             {...invalidProps("foto")}
           />
           {inlineField === "foto" && <p id="product-photo-error" className="catalog-field-error" role="alert">{error}</p>}
           {hasPhoto && (
-            <button type="button" id="product-photo-remove" className="catalog-quiet-button" disabled={pending || !!savedId} onClick={() => {
+            <button type="button" id="product-photo-remove" className="catalog-quiet-button" disabled={pending || locked} onClick={() => {
               setFile(null);
               setPreviewUrl(null);
               setFileInputKey((key) => key + 1);
@@ -441,7 +536,7 @@ export function ProductForm({
           {pendingRemoval && (
             <span className="catalog-photo-note" role="status">
               La fotografía se eliminará cuando guardes.
-              <button type="button" id="product-photo-undo" className="catalog-quiet-button" disabled={pending || !!savedId} onClick={() => {
+              <button type="button" id="product-photo-undo" className="catalog-quiet-button" disabled={pending || locked} onClick={() => {
                 setRemovePhoto(false);
                 focusLater("product-photo-remove");
               }}>Deshacer</button>
@@ -471,7 +566,7 @@ export function ProductForm({
               placeholder="Ej. ESP32-S3"
               autoComplete="off"
               required
-              disabled={pending || !!savedId}
+              disabled={pending || locked}
               {...invalidProps("nombre")}
             />
           </label>
@@ -486,7 +581,7 @@ export function ProductForm({
                 else setCategoriaId(event.target.value);
               }}
               required
-              disabled={pending || !!savedId}
+              disabled={pending || locked}
               {...invalidProps("categoria")}
             >
               <option value="">Selecciona una categoría</option>
@@ -558,12 +653,15 @@ export function ProductForm({
         {cleanupPath && (
           <button type="button" className="catalog-button" onClick={retryCleanup} disabled={pending}>Reintentar eliminación del archivo</button>
         )}
+        {uncertain && (
+          <button type="button" className="catalog-button" onClick={checkSaved} disabled={pending}>Comprobar si se guardó</button>
+        )}
         {savedId && <Link className="catalog-quiet-button" href={`/productos/${savedId}?guardado=1`}>Ver producto guardado</Link>}
         <p className="catalog-save-status" role="status" aria-live="polite">{pending ? stage : ""}</p>
         <div className="catalog-form-actions">
           {onCancel ? <button type="button" onClick={onCancel} className="catalog-quiet-button" disabled={pending}>Cancelar</button> : <Link href={initial ? `/productos/${initial.id}` : "/productos"} className="catalog-quiet-button">Cancelar</Link>}
           <button type="submit" className="catalog-button primary" disabled={pending || !!cleanupPath || !!savedId}>
-            {pending ? stage : initial ? "Guardar cambios" : quick ? "Agregar producto" : "Crear producto"}
+            {pending ? stage : uncertain ? "Reintentar guardado" : initial ? "Guardar cambios" : quick ? "Agregar producto" : "Crear producto"}
           </button>
         </div>
       </form>

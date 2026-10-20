@@ -43,7 +43,7 @@ const fixture = `
   function QuickProbe() {
     return <div className="page-stack">
       <h1>Carga rápida (sonda)</h1>
-      <ProductForm quick initialCategories={window.__categories} onCreated={product => { window.__created = product; }} onCancel={() => { window.__cancelled = (window.__cancelled || 0) + 1; }} />
+      <ProductForm quick initialCategories={window.__categories} onCreated={product => { window.__created = product; window.__createdCount = (window.__createdCount || 0) + 1; }} onCancel={() => { window.__cancelled = (window.__cancelled || 0) + 1; }} />
     </div>;
   }
   function Current() {
@@ -67,33 +67,57 @@ const fakes = {
   catalog: `export async function getCategories(){return window.__categories}
     export async function getProduct(){const product=${JSON.stringify(PRODUCT)};if(window.__mode.photo==='nourl')product.fotoUrl=null;if(window.__mode.photo==='bad')product.fotoUrl='/img/missing.png';return {product,locations:[]}}`,
   supabase: `const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+    const NETWORK = () => ({ code: '', message: 'TypeError: fetch failed', details: '', hint: '' });
     function builder(table) {
       const s = { table, op: 'select', filters: [] };
       const api = {
         select() { return api; }, insert(values) { s.op = 'insert'; s.values = values; return api; }, update(values) { s.op = 'update'; s.values = values; return api; },
         eq(key, value) { s.filters.push([key, value]); return api; }, order() { return api; }, range(from) { s.from = from; return api; },
-        single() { return api; }, maybeSingle() { return api; },
+        single() { s.single = true; return api; }, maybeSingle() { s.single = true; return api; },
         then(resolve, reject) { return run(s).then(resolve, reject); },
       };
       return api;
     }
+    // Productos en memoria: la escritura SE APLICA antes de que el modo «lost» devuelva el error de transporte.
     async function run(s) {
-      const mode = window.__mode;
-      window.__calls.push({ kind: 'db', table: s.table, op: s.op, values: s.values ?? null, filters: s.filters });
+      const mode = window.__mode, db = window.__db;
+      window.__calls.push({ kind: 'db', table: s.table, op: s.op, values: s.values ?? null, filters: s.filters, single: !!s.single });
       if (mode.delay) await wait(mode.delay);
       if (s.table === 'categorias') {
         if (s.op === 'insert') return mode.category === 'duplicate' ? { data: null, error: { code: '23505' } } : mode.category === 'error' ? { data: null, error: { code: '500' } } : { data: { id: 'cat-new', nombre: s.values.nombre }, error: null };
         return { data: window.__categories, error: null };
       }
+      const stamp = () => '2026-10-20T10:0' + (window.__stamp = (window.__stamp || 0) + 1) + ':00.000Z';
+      if (s.op === 'select' && s.single) {
+        if (mode.readback === 'fail') return { data: null, error: NETWORK() };
+        return { data: db[s.filters.find(f => f[0] === 'id')[1]] ?? null, error: null };
+      }
       if (s.op === 'select') return { data: s.from > 0 ? [] : window.__existing, error: mode.list ? { code: '500' } : null };
-      if (s.op === 'insert') return { data: null, error: mode.insert ? { code: '500' } : null };
-      if (mode.update === 'error') return { data: null, error: { code: '500' } };
-      return mode.update === 'conflict' ? { data: null, error: null } : { data: { id: s.filters[0][1] }, error: null };
+      if (s.op === 'insert') {
+        const row = s.values;
+        if (mode.insert === 'error') return { data: null, error: { code: '23514', message: 'check violation' } };
+        if (mode.insert === 'dupOther') { db[row.id] = { ...row, nombre: 'Otro producto', foto_ruta: null, actualizado_en: stamp() }; return { data: null, error: { code: '23505', message: 'duplicate key value violates unique constraint "productos_pkey"' } }; }
+        if (db[row.id]) return { data: null, error: { code: '23505', message: 'duplicate key value violates unique constraint "productos_pkey"' } };
+        const apply = () => { db[row.id] = { ...row, actualizado_en: stamp() }; };
+        if (mode.insert === 'lost') { apply(); return { data: null, error: NETWORK() }; }
+        if (mode.insert === 'lostNotApplied') return { data: null, error: NETWORK() };
+        if (mode.insert === 'late') { setTimeout(apply, mode.lateMs || 700); return { data: null, error: NETWORK() }; }
+        apply(); return { data: null, error: null };
+      }
+      // update
+      if (mode.update === 'error') return { data: null, error: { code: '42501', message: 'permission denied' } };
+      const id = s.filters.find(f => f[0] === 'id')[1], guard = s.filters.find(f => f[0] === 'actualizado_en')[1], row = db[id];
+      if (mode.update === 'conflict' || !row || row.actualizado_en !== guard) return { data: null, error: null };
+      const apply = () => { Object.assign(db[id], s.values, { actualizado_en: stamp() }); };
+      if (mode.update === 'lost') { apply(); return { data: null, error: NETWORK() }; }
+      if (mode.update === 'lostNotApplied') return { data: null, error: NETWORK() };
+      if (mode.update === 'late') { setTimeout(apply, mode.lateMs || 700); return { data: null, error: NETWORK() }; }
+      apply(); return { data: { id }, error: null };
     }
     export function createSupabaseClient() {
       return { from: builder, storage: { from(bucket) { return {
-        async upload(path, file, options) { window.__calls.push({ kind: 'upload', bucket, path, type: file.type, options }); if (window.__mode.delay) await wait(window.__mode.delay); return window.__mode.upload === 'error' ? { error: { message: 'fail' } } : { error: null }; },
-        async remove(paths) { window.__calls.push({ kind: 'remove', bucket, paths }); return window.__mode.remove === 'error' ? { error: { message: 'fail' } } : { error: null }; },
+        async upload(path, file, options) { window.__calls.push({ kind: 'upload', bucket, path, type: file.type, options }); if (window.__mode.delay) await wait(window.__mode.delay); if (window.__mode.upload === 'error') return { error: { message: 'fail' } }; window.__files.add(path); return { error: null }; },
+        async remove(paths) { window.__calls.push({ kind: 'remove', bucket, paths }); if (window.__mode.remove === 'error') return { error: { message: 'fail' } }; for (const p of paths) window.__files.delete(p); return { error: null }; },
       }; } } };
     }`,
 };
@@ -125,7 +149,7 @@ test("UI05b-1: formularios de producto (crear, editar y quick)", async t => {
     else if (url.pathname.startsWith("/img/") && url.pathname !== "/img/ok.svg") { response.statusCode = 404; response.end("missing"); }
     else if (url.pathname === "/img/ok.svg") { response.setHeader("Content-Type", "image/svg+xml"); response.end('<svg xmlns="http://www.w3.org/2000/svg" width="160" height="120"><rect width="160" height="120" fill="#7aa89b"/><circle cx="80" cy="60" r="30" fill="#fff"/></svg>'); }
     else { response.setHeader("Content-Type", "text/html; charset=utf-8");
-      response.end(`<!doctype html><html lang="es"><meta name="viewport" content="width=device-width,initial-scale=1"><style>${css}</style><div id="root"></div><script>window.__calls=[];window.__mode=Object.assign({},(window.__init||{}).mode);window.__existing=(window.__init||{}).existing||[];window.__categories=${JSON.stringify(CATEGORIES)};</script><script src="/fixture.js"></script></html>`); }
+      response.end(`<!doctype html><html lang="es"><meta name="viewport" content="width=device-width,initial-scale=1"><style>${css}</style><div id="root"></div><script>window.__calls=[];window.__mode=Object.assign({},(window.__init||{}).mode);window.__existing=(window.__init||{}).existing||[];window.__db={'p-1':{id:'p-1',nombre:'Módulo térmico',categoria_id:'cat-1',descripcion:'Módulo de control y protección térmica.',foto_ruta:'p-1/anterior.png',actualizado_en:'2026-10-19T12:00:00.000Z'}};window.__files=new Set(['p-1/anterior.png']);window.__categories=${JSON.stringify(CATEGORIES)};</script><script src="/fixture.js"></script></html>`); }
   });
   await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
   t.after(() => new Promise(resolve => server.close(resolve)));
@@ -455,6 +479,150 @@ test("UI05b-1: formularios de producto (crear, editar y quick)", async t => {
     await page.getByText("Archivo temporal eliminado. Puedes guardar de nuevo.").waitFor();
     assert.equal(await page.locator("form.catalog-form button[type=submit]").isDisabled(), false);
     assert.equal(await page.locator("#product-name").inputValue(), "Sensor de proximidad M18"); await page.close();
+  });
+
+  // ── C2a: guardado incierto. El Supabase simulado APLICA la escritura en memoria antes de devolver el error de transporte. ──
+  const state = page => page.evaluate(() => ({ db: JSON.parse(JSON.stringify(window.__db)), files: [...window.__files].sort(), pushed: window.__pushed ?? null }));
+  const removed = list => list.filter(call => call.kind === "remove").flatMap(call => call.paths);
+  const submit = page => page.locator("form.catalog-form button[type=submit]");
+  const withPhoto = async (page, name = "foto.png") => page.locator("#product-photo").setInputFiles({ name, mimeType: "image/png", buffer: PNG });
+  const UNVERIFIED = "No pudimos confirmar si el producto se guardó. Tus datos y la fotografía subida se conservaron; no se eliminó ningún archivo.";
+  const NOT_YET = "Aún no vemos el guardado. Tus datos y la fotografía subida se conservaron. Comprueba de nuevo en unos segundos o reintenta el guardado.";
+  const clearModes = (page, ...keys) => page.evaluate(keys => { for (const key of keys) delete window.__mode[key]; }, keys);
+
+  await t.test("C2a alta con foto: escritura confirmada y respuesta perdida → se confirma por relectura y NO se borra la foto", async () => {
+    const page = await open("/productos/nuevo", { mode: { insert: "lost" } }); await fillValid(page); await withPhoto(page);
+    await submit(page).click(); await page.waitForFunction(() => window.__pushed);
+    const after = await state(page), done = await calls(page), id = Object.keys(after.db).find(key => key !== "p-1");
+    assert.equal(after.pushed, `/productos/${id}?guardado=1`); assert.equal(Object.keys(after.db).length, 2, "un solo producto nuevo");
+    const uploaded = done.find(call => call.kind === "upload").path; assert.equal(after.db[id].foto_ruta, uploaded);
+    assert.deepEqual(removed(done), [], "ningún archivo borrado"); assert.ok(after.files.includes(uploaded), "la foto subida se conserva");
+    assert.equal(done.filter(call => call.op === "insert").length, 1); assert.equal(await page.getByRole("alert").count(), 0); assert.deepEqual(page.errors, []); await page.close();
+  });
+
+  await t.test("C2a edición con foto nueva: escritura confirmada y respuesta perdida → éxito, foto nueva conservada y solo se borra la anterior", async () => {
+    const page = await open("/productos/p-1/editar", { mode: { update: "lost" } });
+    await page.locator("#product-name").fill("Nombre editado"); await withPhoto(page, "nueva.png"); await submit(page).click(); await page.waitForFunction(() => window.__pushed);
+    const after = await state(page), done = await calls(page), uploaded = done.find(call => call.kind === "upload").path;
+    assert.equal(after.db["p-1"].nombre, "Nombre editado"); assert.equal(after.db["p-1"].foto_ruta, uploaded);
+    assert.deepEqual(removed(done), ["p-1/anterior.png"], "solo la foto anterior, después de confirmar"); assert.deepEqual(after.files, [uploaded]);
+    assert.equal(after.pushed, "/productos/p-1?guardado=1"); assert.equal(done.filter(call => call.op === "update").length, 1); await page.close();
+  });
+
+  await t.test("C2a escritura no confirmada: estado incierto seguro, campos bloqueados y conservados, sin borrados; reintento con la misma identidad y sin duplicar", async () => {
+    const page = await open("/productos/nuevo", { mode: { insert: "lostNotApplied" } }); await fillValid(page); await page.locator("#product-description").fill("Descripción larga"); await withPhoto(page);
+    await submit(page).click(); await page.getByRole("alert").waitFor();
+    assert.equal(await text(page.getByRole("alert")), NOT_YET); assert.equal(await text(submit(page)), "Reintentar guardado"); assert.equal(await page.getByRole("button", { name: "Comprobar si se guardó" }).count(), 1);
+    assert.equal(await page.getByRole("button", { name: "Reintentar eliminación del archivo" }).count(), 0, "sin botón de eliminación mientras el estado es incierto");
+    assert.equal(await page.locator("#product-name").inputValue(), "Sensor de proximidad M18"); assert.equal(await page.locator("#product-description").inputValue(), "Descripción larga");
+    assert.equal(await page.locator("#product-name").isDisabled(), true, "los datos no pueden cambiar hasta resolver el incierto"); assert.equal(await page.locator(".catalog-photo-preview img").count(), 1);
+    let done = await calls(page); const first = done.find(call => call.op === "insert").values.id, uploaded = done.find(call => call.kind === "upload").path;
+    assert.deepEqual(removed(done), [], "no se borra nada en estado incierto"); assert.equal(first, uploaded.split("/")[0]);
+    await clearModes(page, "insert"); await submit(page).click(); await page.waitForFunction(() => window.__pushed);
+    done = await calls(page); const after = await state(page);
+    assert.deepEqual(done.filter(call => call.op === "insert").map(call => call.values.id), [first, first], "el reintento reutiliza el id del producto");
+    assert.equal(done.filter(call => call.kind === "upload").length, 1, "no se vuelve a subir"); assert.equal(Object.keys(after.db).length, 2); assert.equal(after.db[first].foto_ruta, uploaded);
+    assert.deepEqual(removed(done), []); assert.equal(after.pushed, `/productos/${first}?guardado=1`); await page.close();
+  });
+
+  await t.test("C2a relectura fallida: sin éxito ni fracaso definitivo; «Comprobar si se guardó» confirma después y no se borra nada", async () => {
+    const page = await open("/productos/nuevo", { mode: { insert: "lost", readback: "fail" } }); await fillValid(page); await withPhoto(page);
+    await submit(page).click(); await page.getByRole("alert").waitFor(); assert.equal(await text(page.getByRole("alert")), UNVERIFIED);
+    assert.equal(await page.evaluate(() => window.__pushed ?? null), null, "no se declara éxito");
+    let done = await calls(page); assert.deepEqual(removed(done), []);
+    await page.getByRole("button", { name: "Comprobar si se guardó" }).click(); await page.getByRole("alert").waitFor(); assert.equal(await text(page.getByRole("alert")), UNVERIFIED, "sigue sin poder comprobarse");
+    await clearModes(page, "readback"); await page.getByRole("button", { name: "Comprobar si se guardó" }).click(); await page.waitForFunction(() => window.__pushed);
+    done = await calls(page); const after = await state(page), uploaded = done.find(call => call.kind === "upload").path;
+    assert.deepEqual(removed(done), []); assert.ok(after.files.includes(uploaded)); assert.equal(done.filter(call => call.op === "insert").length, 1, "comprobar no vuelve a escribir"); await page.close();
+  });
+
+  await t.test("C2a escritura aún en curso: «fila ausente» no es fracaso; la foto no se borra y la escritura tardía se confirma", async () => {
+    const page = await open("/productos/nuevo", { mode: { insert: "late", lateMs: 900 } }); await fillValid(page); await withPhoto(page);
+    await submit(page).click(); await page.getByRole("alert").waitFor(); assert.equal(await text(page.getByRole("alert")), NOT_YET);
+    assert.equal((await state(page)).pushed, null); assert.deepEqual(removed(await calls(page)), []);
+    await page.waitForFunction(() => Object.keys(window.__db).length === 2); // la escritura llega después
+    await page.getByRole("button", { name: "Comprobar si se guardó" }).click(); await page.waitForFunction(() => window.__pushed);
+    const done = await calls(page), after = await state(page), uploaded = done.find(call => call.kind === "upload").path;
+    assert.deepEqual(removed(done), [], "la fotografía referenciada por la escritura tardía nunca se borró"); assert.ok(after.files.includes(uploaded)); await page.close();
+  });
+
+  await t.test("C2a reintento tras escritura aplicada con relectura fallida: 23505 con coincidencia → confirmado, un solo producto, nada borrado", async () => {
+    const page = await open("/productos/nuevo", { mode: { insert: "lost", readback: "fail" } }); await fillValid(page); await withPhoto(page);
+    await submit(page).click(); await page.getByRole("alert").waitFor(); await clearModes(page, "readback", "insert");
+    await submit(page).click(); await page.waitForFunction(() => window.__pushed);
+    const done = await calls(page), after = await state(page), inserts = done.filter(call => call.op === "insert");
+    assert.equal(inserts.length, 2); assert.equal(inserts[0].values.id, inserts[1].values.id); assert.equal(Object.keys(after.db).length, 2, "sin producto duplicado"); assert.deepEqual(removed(done), []);
+    assert.equal(after.pushed, `/productos/${inserts[0].values.id}?guardado=1`); await page.close();
+  });
+
+  await t.test("C2a alta sin fotografía: respuesta perdida y reintento sin duplicar ni subir nada", async () => {
+    const page = await open("/productos/nuevo", { mode: { insert: "lost", readback: "fail" } }); await fillValid(page);
+    await submit(page).click(); await page.getByRole("alert").waitFor(); assert.equal(await text(page.getByRole("alert")), UNVERIFIED);
+    await clearModes(page, "readback"); await page.getByRole("button", { name: "Comprobar si se guardó" }).click(); await page.waitForFunction(() => window.__pushed);
+    const done = await calls(page), after = await state(page); assert.equal(done.filter(call => call.kind === "upload").length, 0); assert.equal(Object.keys(after.db).length, 2); assert.deepEqual(removed(done), []); await page.close();
+  });
+
+  await t.test("C2a 23505 sin coincidencia tras un incierto: no es éxito, no se borra la foto", async () => {
+    const page = await open("/productos/nuevo", { mode: { insert: "lostNotApplied" } }); await fillValid(page); await withPhoto(page);
+    await submit(page).click(); await page.getByRole("alert").waitFor(); await page.evaluate(() => { window.__mode.insert = "dupOther"; });
+    await submit(page).click(); await page.waitForFunction(() => document.querySelector("[role=alert]")?.textContent.includes("rechazó el reintento"));
+    const done = await calls(page), after = await state(page), uploaded = done.find(call => call.kind === "upload").path;
+    assert.equal(after.pushed, null, "un 23505 sin coincidencia exacta no se toma como éxito"); assert.deepEqual(removed(done), []); assert.ok(after.files.includes(uploaded)); assert.equal(await text(submit(page)), "Reintentar guardado"); await page.close();
+  });
+
+  await t.test("C2a error definitivo: la limpieza solo ocurre tras comprobar que nada referencia el archivo", async () => {
+    const page = await open("/productos/nuevo", { mode: { insert: "error" } }); await fillValid(page); await withPhoto(page);
+    await submit(page).click(); await page.getByRole("alert").filter({ hasText: "No pudimos guardar el producto." }).waitFor();
+    const done = await calls(page), uploaded = done.find(call => call.kind === "upload").path;
+    const order = done.map(call => call.kind === "remove" ? "remove" : call.single ? "readback" : call.kind === "upload" ? "upload" : call.op === "insert" ? "insert" : "other").filter(kind => kind !== "other");
+    assert.deepEqual(order, ["upload", "insert", "readback", "remove"], "relectura antes de borrar"); assert.deepEqual(removed(done), [uploaded]); assert.equal((await state(page)).files.length, 1, "queda solo la foto original del fixture");
+    assert.equal(await page.locator("#product-name").inputValue(), "Sensor de proximidad M18"); await page.close();
+  });
+
+  await t.test("C2a conflicto de edición: se limpia lo subido con comprobación; tras un incierto no se borra", async () => {
+    let page = await open("/productos/p-1/editar", { mode: { update: "conflict" } }); await page.locator("#product-name").fill("Cambio"); await withPhoto(page, "nueva.png"); await submit(page).click();
+    await page.getByRole("alert").filter({ hasText: "El producto cambió en otra sesión." }).waitFor(); let done = await calls(page);
+    assert.deepEqual(removed(done), [done.find(call => call.kind === "upload").path]); await page.close();
+    page = await open("/productos/p-1/editar", { mode: { update: "lostNotApplied" } }); await page.locator("#product-name").fill("Cambio"); await withPhoto(page, "nueva.png"); await submit(page).click(); await page.getByRole("alert").waitFor();
+    await page.evaluate(() => { Object.assign(window.__db["p-1"], { nombre: "Otra sesión", actualizado_en: "2026-10-20T09:00:00.000Z" }); delete window.__mode.update; });
+    await submit(page).click(); await page.waitForFunction(() => document.querySelector("[role=alert]")?.textContent.includes("rechazó el reintento"));
+    done = await calls(page); assert.deepEqual(removed(done), [], "con un intento previo no confirmado no se borra nada"); assert.equal((await state(page)).pushed, null); await page.close();
+  });
+
+  await t.test("C2a «Reintentar eliminación» no borra una fotografía que pasó a estar referenciada", async () => {
+    const page = await open("/productos/nuevo", { mode: { insert: "error", remove: "error" } }); await fillValid(page); await withPhoto(page);
+    await submit(page).click(); await page.getByRole("button", { name: "Reintentar eliminación del archivo" }).waitFor();
+    let done = await calls(page); const uploaded = done.find(call => call.kind === "upload").path, id = uploaded.split("/")[0]; assert.deepEqual(removed(done), [uploaded], "el primer intento (fallido) se hizo tras la relectura");
+    // Una escritura tardía referencia ahora el archivo: el botón no debe destruirlo.
+    await page.evaluate(([id, path]) => { window.__db[id] = { id, nombre: "Tardío", categoria_id: "cat-2", descripcion: null, foto_ruta: path, actualizado_en: "2026-10-20T10:00:00.000Z" }; delete window.__mode.remove; }, [id, uploaded]);
+    await page.getByRole("button", { name: "Reintentar eliminación del archivo" }).click(); await page.getByText("La fotografía está en uso por el producto; no se eliminó.").waitFor();
+    done = await calls(page); assert.deepEqual(removed(done), [uploaded], "ninguna llamada de borrado adicional"); assert.ok((await state(page)).files.includes(uploaded)); await page.close();
+  });
+
+  await t.test("C2a sustitución: «Reintentar eliminación» de la foto anterior tras guardado confirmado, y no la borra si volvió a estar referenciada", async () => {
+    let page = await open("/productos/p-1/editar", { mode: { remove: "error" } }); await withPhoto(page, "nueva.png"); await submit(page).click();
+    await page.getByText("Producto guardado. Falta eliminar la fotografía anterior.").waitFor(); assert.equal(await page.evaluate(() => window.__pushed ?? null), null);
+    await clearModes(page, "remove"); await page.getByRole("button", { name: "Reintentar eliminación del archivo" }).click(); await page.waitForFunction(() => window.__pushed);
+    let done = await calls(page); assert.deepEqual(removed(done), ["p-1/anterior.png", "p-1/anterior.png"]); assert.equal((await state(page)).files.length, 1); await page.close();
+    page = await open("/productos/p-1/editar", { mode: { remove: "error" } }); await withPhoto(page, "nueva.png"); await submit(page).click(); await page.getByText("Producto guardado. Falta eliminar la fotografía anterior.").waitFor();
+    await page.evaluate(() => { window.__db["p-1"].foto_ruta = "p-1/anterior.png"; delete window.__mode.remove; });
+    await page.getByRole("button", { name: "Reintentar eliminación del archivo" }).click(); await page.waitForFunction(() => window.__pushed);
+    done = await calls(page); assert.deepEqual(removed(done), ["p-1/anterior.png"], "solo el intento inicial fallido; el reintento no borra una foto referenciada"); await page.close();
+  });
+
+  await t.test("C2a modo quick: onCreated se invoca una sola vez por operación lógica, también con respuesta perdida", async () => {
+    const page = await open("/quick", { mode: { insert: "lost", readback: "fail" } }); await fillValid(page, "Producto rápido");
+    await submit(page).click(); await page.getByRole("alert").waitFor(); assert.equal(await page.evaluate(() => window.__createdCount ?? 0), 0, "incierto: todavía no se crea");
+    await clearModes(page, "readback"); await page.getByRole("button", { name: "Comprobar si se guardó" }).click(); await page.waitForFunction(() => window.__createdCount === 1);
+    await submit(page).click({ force: true }); await page.waitForTimeout(300);
+    const done = await calls(page), count = await page.evaluate(() => window.__createdCount);
+    assert.equal(count, 1, "un segundo envío no repite onCreated"); assert.equal(done.filter(call => call.op === "insert").length, 1); assert.equal(Object.keys((await state(page)).db).length, 2); assert.equal(await page.evaluate(() => window.__pushed ?? null), null, "quick no navega"); await page.close();
+  });
+
+  await t.test("C2a doble envío del reintento: una sola escritura", async () => {
+    const page = await open("/productos/nuevo", { mode: { insert: "lostNotApplied" } }); await fillValid(page); await submit(page).click(); await page.getByRole("alert").waitFor();
+    await clearModes(page, "insert"); await page.evaluate(() => window.__calls.splice(0)); await page.evaluate(() => { const form = document.querySelector("form.catalog-form"); form.requestSubmit(); form.requestSubmit(); });
+    await page.waitForFunction(() => window.__pushed); assert.equal((await calls(page)).filter(call => call.op === "insert").length, 1); await page.close();
   });
 
   // ── Responsive, contraste, foco, teclado y movimiento ──
