@@ -43,7 +43,7 @@ begin
   -- Ajuste físico por la RPC existente sobre una caja.
   perform public.registrar_ajuste_fisico(p, box1, 9, 3);
   if (select cantidad from public.inventario where producto_id=p and compartimiento_id=box1) <> 9 then raise exception 'ajuste en caja'; end if;
-  begin perform public.registrar_ajuste_fisico(p, box1, 1, 3); raise exception 'ajuste obsoleto aceptado'; exception when serialization_failure then null; end;
+  begin perform public.registrar_ajuste_fisico(p, box1, 1, 3); raise exception 'ajuste obsoleto aceptado'; exception when sqlstate 'PT409' then null; end;
 
   -- Los movimientos capturan el código de la caja al ocurrir; el renombrado conserva el histórico y el ID permanente.
   perform * from public.renombrar_codigo_caja(box1, old_code, 'PRUEBA_RENOMBRADA');

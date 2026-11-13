@@ -61,7 +61,7 @@ begin
   begin
     perform public.renombrar_codigo_caja(v_id,'MOTORES_1','A1');
     raise exception 'Código esperado obsoleto aceptado incluso en no-op';
-  exception when sqlstate '40001' then null; end;
+  exception when sqlstate 'PT409' then null; end;
   begin
     perform public.renombrar_codigo_caja(999999,'A1','CAJA_NUEVA');
     raise exception 'ID inexistente aceptado';

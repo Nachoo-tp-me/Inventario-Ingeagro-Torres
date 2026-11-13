@@ -99,7 +99,7 @@ begin
   begin
     perform public.registrar_ajuste_fisico('00000000-0000-0000-0000-000000000001', v_destino, 3, 7);
     raise exception 'Ajuste con lectura obsoleta aceptado';
-  exception when sqlstate '40001' then null;
+  exception when sqlstate 'PT409' then null;
   end;
 
   if (select cantidad from public.inventario where producto_id =

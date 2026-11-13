@@ -63,7 +63,7 @@ function fixture(products = samples.map(row => structuredClone(row))) {
     assert.equal(name,'renombrar_codigo_caja');state.rpcs.push({name,input});
     const box=state.compartments.find(row=>row.id===input.p_ubicacion_id);
     if(!box||box.tipo!=='caja')return {data:null,error:{code:'22023'}};
-    if(box.codigo!==input.p_codigo_esperado)return {data:null,error:{code:'40001'}};
+    if(box.codigo!==input.p_codigo_esperado)return {data:null,error:{code:'PT409'}};
     const reserved=state.codes.find(row=>row.codigo===input.p_codigo_nuevo);
     if(reserved&&reserved.compartimiento_id!==box.id)return {data:null,error:{code:'23505'}};
     const unchanged=box.codigo===input.p_codigo_nuevo;

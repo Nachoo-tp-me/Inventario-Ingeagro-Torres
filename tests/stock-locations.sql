@@ -67,7 +67,7 @@ begin
   begin
     perform public.registrar_ajuste_fisico(p,b1,10,4);
     raise exception 'Lectura obsoleta aceptada';
-  exception when sqlstate '40001' then null; end;
+  exception when sqlstate 'PT409' then null; end;
   begin
     insert into public.movimientos(producto_id,tipo,cantidad,origen_compartimiento_id,destino_compartimiento_id) values(p,'traslado',1,b1,999999);
     raise exception 'Destino inexistente aceptado';

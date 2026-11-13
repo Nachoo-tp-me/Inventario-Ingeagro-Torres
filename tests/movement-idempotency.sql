@@ -128,7 +128,7 @@ begin
   select count(*) into v_nulls from public.movimientos where producto_id=h and tipo='ajuste' and solicitud_id is null;
   if v_stock <> 10 or v_nulls <> 1 then raise exception '9: stock=% ajustes=%', v_stock, v_nulls; end if;
   begin perform public.registrar_ajuste_fisico(h, l1, 3, 14); raise exception '9: ajuste con lectura obsoleta aceptado';
-  exception when serialization_failure then null; end;
+  exception when sqlstate 'PT409' then null; end;
   select cantidad into v_stock from public.inventario where producto_id=h and compartimiento_id=l1;
   if v_stock <> 10 then raise exception '9: stock tras conflicto=%', v_stock; end if;
   -- el cliente no puede insertar ajustes directos (RLS) aunque aporte un UUID
@@ -136,7 +136,7 @@ begin
     raise exception '9: ajuste directo aceptado'; exception when insufficient_privilege then null; end;
 end;
 $$;
-select 'PASS ajuste físico por RPC sin cambios (sin solicitud_id, conflicto 40001, RLS contra ajustes directos)';
+select 'PASS ajuste físico por RPC sin cambios (sin solicitud_id, conflicto PT409, RLS contra ajustes directos)';
 
 -- 10. Inmutabilidad intacta: no se puede actualizar ni borrar, tampoco solicitud_id.
 do $$

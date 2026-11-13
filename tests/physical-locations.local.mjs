@@ -235,7 +235,7 @@ test("Bloques 1/2/4: migraciones, stock, códigos, RLS y concurrencia en Postgre
         values('${product(304)}','entrada',5,${box("TEST_E2_P1")});`);
       const adjustment = physical => `${authorized} select public.registrar_ajuste_fisico('${product(304)}',${box("TEST_E2_P1")},${physical},5)`;
       const result = await overlap(database, adjustment(4), adjustment(7), 74005, 3);
-      assert.match(result.stderr, /40001/);
+      assert.match(result.stderr, /PT409/);
       assert.equal(sql(database, `select cantidad from public.inventario where producto_id='${product(304)}';`), "4");
       assert.equal(sql(database, `select count(*) from public.movimientos where producto_id='${product(304)}' and tipo='ajuste';`), "1");
     });
@@ -257,7 +257,7 @@ test("Bloques 1/2/4: migraciones, stock, códigos, RLS y concurrencia en Postgre
       const id = sql(database, "select id from public.compartimientos where codigo='TEST_E3_P1';");
       const rename = code => `${authorized} select * from public.renombrar_codigo_caja(${id},'TEST_E3_P1','${code}')`;
       const result = await overlap(database, rename("RPC_WINNER"), rename("RPC_LOSER"), 74007, 3);
-      assert.match(result.stderr, /40001/);
+      assert.match(result.stderr, /PT409/);
       assert.equal(sql(database, "select count(*) from public.cambios_codigo_ubicacion where codigo_nuevo='RPC_WINNER';"), "1");
       assert.equal(sql(database, "select count(*) from public.ubicacion_codigos where codigo='RPC_LOSER';"), "0");
     });

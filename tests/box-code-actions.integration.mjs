@@ -46,7 +46,11 @@ test('errores duplicado/histórico/concurrencia/autorización sin reintentos ni 
   await renameBoxCode({ ubicacionId: 74, codigoEsperado: 'A2', codigoNuevo: 'OTRA' });
   assert.equal((await renameBoxCode(input('A2'))).ok, false);
   assert.equal((await renameBoxCode({ ...input('NUEVO'), codigoEsperado: 'ANTERIOR' })).stale, true);
-  for (const code of ['23505', '40001', '23503', '22023', '42501', 'XX000']) {
+  for (const code of ['PT409', '40001']) {
+    state.renameError = code;
+    assert.equal((await renameBoxCode(input())).stale, true, `${code}: conflicto de código esperado`);
+  }
+  for (const code of ['23505', 'PT409', '40001', '23503', '22023', '42501', 'XX000']) {
     state.renameError = code;
     const count = state.rpcs.length;
     const result = await renameBoxCode(input());

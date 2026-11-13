@@ -223,8 +223,8 @@ test("B4: contraste computado, fondos efectivos y comparación visual de ambos t
       await page.goto(url+route);await page.locator("#root > *").waitFor();
       await shot(name);
       if(route==="/"&&width<400){
-        await page.locator(".mobile-navigation").getByRole("link",{name:"Torres",exact:true}).hover();await shot("navigation-hover",true);
-        await page.mouse.move(0,0);await page.locator(".mobile-navigation").getByRole("link",{name:"Torres",exact:true}).focus();await shot("navigation-focus");
+        await page.locator(".mobile-navigation").getByRole("link",{name:"Ubicaciones",exact:true}).hover();await shot("navigation-hover",true);
+        await page.mouse.move(0,0);await page.locator(".mobile-navigation").getByRole("link",{name:"Ubicaciones",exact:true}).focus();await shot("navigation-focus");
       }
       if(route==="/productos"){
         await page.locator(".catalog-card").hover();await shot("catalog-hover",true);

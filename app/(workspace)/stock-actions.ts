@@ -29,7 +29,9 @@ export type StockActionResult = {
 
 function friendlyStockError(code?: string): string {
   if (code === "23514") return "No hay stock suficiente. El stock pudo haber cambiado; actualiza e inténtalo nuevamente.";
-  if (code === "40001") return "El stock cambió. Actualiza e inténtalo nuevamente.";
+  // PT409 = conflicto de cantidad esperada de registrar_ajuste_fisico (HTTP 409, sin reintentos de PostgREST).
+  // 40001 se conserva para bases aún sin la migración 20260930060000 y para fallos de serialización reales.
+  if (code === "PT409" || code === "40001") return "El stock cambió. Actualiza e inténtalo nuevamente.";
   if (code === "23503") return "El producto o la ubicación ya no existe. Actualiza la página.";
   if (code === "22023") return "Revisa la cantidad ingresada.";
   return "No fue posible completar el movimiento. Inténtalo nuevamente.";

@@ -86,6 +86,12 @@ test('errores sin código y excepciones son inciertos; los rechazos conocidos so
   }
   const rpc = createShelfFixture(); rpc.state.client.rpc = async () => { throw new Error('boom'); };
   const adjust = await rpc.submitStockOperationRaw({ tipo: 'ajuste', productoId: productId, origenId: 73, cantidadFisica: 1, cantidadEsperada: 7 }); assert.deepEqual([adjust.ok, adjust.uncertain, adjust.message], [false, undefined, 'No fue posible completar el movimiento. Inténtalo nuevamente.']);
+  // Conflicto de cantidad esperada de la RPC: PT409 (migración 20260930060000) y el antiguo 40001 dan el mismo mensaje definitivo.
+  for (const code of ['PT409', '40001']) {
+    const g = createShelfFixture(); g.state.client.rpc = async () => ({ data: null, error: { code, message: 'El stock cambió' } });
+    const r = await g.submitStockOperationRaw({ tipo: 'ajuste', productoId: productId, origenId: 73, cantidadFisica: 1, cantidadEsperada: 7 });
+    assert.deepEqual([r.ok, r.uncertain], [false, undefined], code); assert.match(r.message, /El stock cambió/, code);
+  }
 });
 
 test('dos operaciones legítimas idénticas con UUID distintos: dos movimientos y dos aplicaciones', async () => {

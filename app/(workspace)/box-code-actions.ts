@@ -35,7 +35,8 @@ export async function renameBoxCode(input: BoxCodeInput): Promise<BoxCodeResult>
       console.error("No se pudo confirmar el cambio de código de caja.");
       const code = result.error.code;
       if (code === "23505") return { ok: false, message: "Ese código pertenece a otra ubicación, aunque ya no sea su código actual." };
-      if (code === "40001") return { ok: false, stale: true, message: "El código cambió en otra sesión. Cierra y vuelve a abrir este formulario para usar el código actual." };
+      // PT409 = código esperado desactualizado (migración 20261020010000); 40001 se conserva por compatibilidad.
+      if (code === "PT409" || code === "40001") return { ok: false, stale: true, message: "El código cambió en otra sesión. Cierra y vuelve a abrir este formulario para usar el código actual." };
       if (code === "23503") return { ok: false, message: "La caja ya no está disponible. Actualiza la página." };
       if (code === "22023") return { ok: false, message: "El código o la ubicación no son válidos. Solo se pueden editar cajas." };
       if (code === "42501") return { ok: false, message: "No tienes autorización para cambiar el código." };

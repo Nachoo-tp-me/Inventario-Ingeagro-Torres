@@ -207,7 +207,7 @@ select test_support.assert_true((select sum(cantidad) from public.inventario
 select public.registrar_ajuste_fisico('00000000-0000-0000-0000-000000000201',
   (select id from public.compartimientos where codigo='TEST_E1_P2'),5,3);
 select test_support.expect_failure($q$select public.registrar_ajuste_fisico('00000000-0000-0000-0000-000000000201',
-  (select id from public.compartimientos where codigo='TEST_E1_P2'),9,3)$q$, array['40001']);
+  (select id from public.compartimientos where codigo='TEST_E1_P2'),9,3)$q$, array['PT409']);
 insert into public.movimientos(producto_id,tipo,cantidad,origen_compartimiento_id)
 select '00000000-0000-0000-0000-000000000201','retiro',5,id from public.compartimientos where codigo='TEST_E1_P2';
 select test_support.assert_true(not exists(select 1 from public.inventario

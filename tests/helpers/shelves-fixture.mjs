@@ -140,7 +140,7 @@ export function createShelfFixture() {
         const box = state.tables.compartimientos.find(row => row.id === input.p_ubicacion_id);
         if (!box) return { data: null, error: { code: '23503' } };
         if (box.tipo !== 'caja') return { data: null, error: { code: '22023' } };
-        if (box.codigo !== input.p_codigo_esperado) return { data: null, error: { code: '40001' } };
+        if (box.codigo !== input.p_codigo_esperado) return { data: null, error: { code: 'PT409' } };
         const owner = state.codeOwners.get(input.p_codigo_nuevo);
         if (owner !== undefined && owner !== box.id) return { data: null, error: { code: '23505' } };
         const unchanged = box.codigo === input.p_codigo_nuevo;
@@ -153,7 +153,7 @@ export function createShelfFixture() {
       }
       if (name !== 'registrar_ajuste_fisico') throw new Error(`Unsupported synthetic RPC: ${name}`);
       const current = quantity(input.p_producto_id, input.p_compartimiento_id);
-      if (current !== input.p_cantidad_esperada) return { data: null, error: { code: '40001' } };
+      if (current !== input.p_cantidad_esperada) return { data: null, error: { code: 'PT409' } };
       if (current === input.p_cantidad_fisica) return { data: null, error: null };
       const delta = input.p_cantidad_fisica - current;
       const result = insert({ producto_id: input.p_producto_id, tipo: 'ajuste', cantidad: Math.abs(delta),

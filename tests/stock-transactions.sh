@@ -29,7 +29,8 @@ for migration in \
   supabase/migrations/20260930000000_shared_account_read_access.sql \
   supabase/migrations/20260930010000_limit_dashboard_read_access.sql \
   supabase/migrations/20260930020000_shared_account_category_read.sql \
-  supabase/migrations/20260930050000_transactional_stock_operations.sql; do
+  supabase/migrations/20260930050000_transactional_stock_operations.sql \
+  supabase/migrations/20260930060000_physical_adjustment_conflict_pt409.sql; do
   docker exec -i "$container" psql -U postgres -v ON_ERROR_STOP=1 >/dev/null < "$migration"
 done
 docker exec -i "$container" psql -U postgres -v ON_ERROR_STOP=1 >/dev/null < supabase/seed.sql
