@@ -29,16 +29,37 @@ contiene credenciales, URLs de producción ni etiquetas reales de cajas.
 
 ## 2. Secuencia operativa de publicación (la base de datos siempre ANTES que la aplicación)
 
-Herramientas (fuera del repositorio, en `%USERPROFILE%\ingeagro-produccion\`; ninguna guarda credenciales):
-`verificar-produccion.ps1` (solo lectura: historial, `db push --dry-run`, estado del esquema y **huella de datos**),
-`respaldo-produccion.ps1` (solo lectura: `pg_dump` + fotos del bucket con manifiesto SHA-256), `restauracion-prueba.ps1`
-(100 % local: restaura en un PostgreSQL desechable y compara la huella). La **huella** (`huella-datos.sql`) son recuentos y md5 de
-categorías, productos, inventario, ubicaciones, movimientos, usuarios y fotos usando solo columnas V1: debe ser idéntica en producción
-antes, en el respaldo restaurado y en producción después de migrar.
+Herramientas (fuera del repositorio, en `%USERPROFILE%\ingeagro-produccion\`; ninguna guarda credenciales; las consultas que usan
+están versionadas en `supabase/release/` y ensayadas en `tests/release-rehearsal.local.mjs`):
+- `verificar-produccion.ps1`: **solo** `supabase db query --read-only` con tres SELECT (estado del esquema, historial, huella). No usa
+  `migration list` ni `db push --dry-run` (ninguna orden que pueda crear o tocar el historial); el dry-run real se hace en la ventana.
+- `respaldo-produccion.ps1`: `pg_dump` 18 (binarios EDB portables, firma verificada; servidor 14–18) + **archivos reales** del bucket
+  con manifiesto SHA-256; zip **cifrado** con `cifrado-respaldo.ps1` y verificado por descifrado completo; borra el texto plano.
+- `restauracion-prueba.ps1`: 100 % local; descifra, comprueba SHA-256 de volcados y de cada foto (y que sean imágenes), restaura en un
+  PostgreSQL desechable y compara la huella. Ensayado de extremo a extremo con datos ficticios (incluidos casos que deben fallar).
+- `restaurar-storage.mjs`: re-subida de las fotos (simulación por defecto; `upsert:false`).
+
+La **huella** (`huella-datos.sql`) son recuentos y md5 de categorías, productos, inventario, ubicaciones, movimientos, usuarios y fotos
+usando solo columnas V1: debe ser idéntica en producción antes, en el respaldo restaurado y en producción después de migrar (el ensayo
+local con las 14 migraciones lo confirma).
+
+**Cifrado del respaldo:** AES-256-CBC + HMAC-SHA256 (cifrar y luego autenticar), clave PBKDF2-SHA256 de 600 000 iteraciones, formato
+documentado en `cifrado-respaldo.ps1`. Funciona con Windows PowerShell 5.1 sin instalar nada y se ha comprobado que **OpenSSL descifra
+el archivo de forma independiente**, así que no depende de este equipo. No se usa EFS como protección única: este perfil no tiene
+certificado EFS y perderlo haría el respaldo irrecuperable. La contraseña del respaldo se guarda en el gestor de contraseñas.
+
+**Qué demuestra la restauración de prueba y qué no:**
+- Demuestra: integridad (SHA-256) de volcados y de cada archivo real de Storage; que los **datos de negocio** (productos, stock,
+  ubicaciones, movimientos, categorías) y las filas de `auth.users`/`storage.objects` se restauran idénticos.
+- No demuestra: que Supabase Auth o Storage acepten esas filas en un proyecto real (no hay proyecto de pruebas con datos reales y está
+  prohibido copiarlos a staging). Vías de recuperación: **Auth** — ninguna tabla de negocio referencia `auth.users`; la app solo depende
+  del UUID fijo de la cuenta autorizada, y recrearla con ese UUID por la API de administración está probado en staging (después,
+  restablecer su contraseña). **Storage** — re-subir los archivos con `restaurar-storage.mjs` (la llamada `upload` es la probada en la
+  aceptación real de Storage; la re-subida masiva no se ha ejecutado contra ningún proyecto).
 
 | # | Qué | Criterio para seguir |
 |---|---|---|
-| 0 | Verificación previa (solo lectura, cualquier día) | Dry-run = exactamente las 6 pendientes; esquema = V1 exacta; guardas de `20261014000000` cumplidas. |
+| 0 | Verificación previa (solo lectura, cualquier día) | Historial = exactamente las 8 V1 (pendientes = 6); esquema = V1 exacta; guardas de `20261014000000` cumplidas. |
 | 1 | Anunciar ventana; nadie usa la app (≈ 45 min) | — |
 | 2 | Respaldo (`respaldo-produccion.ps1`) | Huella idéntica antes/después del volcado; fotos descargadas = `storage.objects`. |
 | 3 | Restauración de prueba local (`restauracion-prueba.ps1`) | Huella restaurada idéntica a la de producción. **Sin esto no se migra.** |
@@ -93,14 +114,10 @@ la migración falla limpia y se reintenta). Hacerlo en una ventana sin uso de la
 
 ### Respaldo previo (obligatorio, verificado antes de migrar)
 
-El plan Free no incluye copias automáticas descargables. Respaldo mínimo, por una persona autorizada y fuera del repositorio:
-1. Volcado lógico con `pg_dump` (cliente PostgreSQL 17, gratuito) de los esquemas `public` y `auth` (+ metadatos de `storage`) en formato
-   custom, mediante el Session pooler de producción.
-2. Descarga de todos los objetos del bucket `product-images` (los archivos no viven en la base).
-3. **Verificación:** restaurar el volcado en un PostgreSQL local desechable y comparar recuentos (productos, inventario, movimientos,
-   categorías, usuarios) y suma de existencias con producción; comprobar que el número de archivos descargados coincide con
-   `storage.objects` del bucket.
-4. Anotar los recuentos de referencia: deben coincidir exactamente tras la migración (V2 no cambia ninguno de ellos).
+El plan Free no incluye copias automáticas descargables. Se hace con `respaldo-produccion.ps1` y `restauracion-prueba.ps1` (ver §2):
+volcado lógico (`public` + historial; `auth.users`, `auth.identities`, `storage.buckets`, `storage.objects`), archivos reales del
+bucket con SHA-256, huella antes/después del volcado, paquete cifrado y restauración local comprobada. La huella guardada es la
+referencia que debe coincidir exactamente tras la migración (V2 no cambia ninguno de esos datos).
 
 ### Compatibilidad temporal con V1
 
