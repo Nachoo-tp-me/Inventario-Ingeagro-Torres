@@ -27,16 +27,40 @@ contiene credenciales, URLs de producción ni etiquetas reales de cajas.
    permanente por diseño (estantes, IDs y códigos no se borran): su única reversión es restaurar el respaldo.
 4. **Validación en un Supabase aislado** (§6) con las pruebas de PostgREST/JWT/Storage reales.
 
-## 2. Orden de despliegue (la base de datos siempre ANTES que la aplicación)
+## 2. Secuencia operativa de publicación (la base de datos siempre ANTES que la aplicación)
 
-| Paso | Qué | Dónde | Notas |
-|---|---|---|---|
-| 1 | Respaldo | Producción | Obligatorio. |
-| 2 | Migraciones en orden (Supabase CLI: `supabase db push` desde un enlace explícito al proyecto) | Producción | Ver lista abajo. Todas son aditivas. |
-| 3 | Comprobar esquema | Producción (solo lectura) | `movimientos.solicitud_id` existe; `estantes`, `ubicacion_codigos` existen; 72 compartimientos de torre. |
-| 4 | Desplegar la aplicación V2 | Netlify | Con 0 estantes la interfaz está pensada para mostrar «No hay estantes registrados» (verificarlo en el entorno aislado antes). |
-| 5 | Aprovisionar 6 estantes y 24 cajas | Producción | `supabase/provisioning/provision_estantes_cajas.sql` con las etiquetas reales (§3). Una sola vez. |
-| 6 | Pruebas de humo (§4) | Producción | Con la cuenta autorizada. |
+Herramientas (fuera del repositorio, en `%USERPROFILE%\ingeagro-produccion\`; ninguna guarda credenciales):
+`verificar-produccion.ps1` (solo lectura: historial, `db push --dry-run`, estado del esquema y **huella de datos**),
+`respaldo-produccion.ps1` (solo lectura: `pg_dump` + fotos del bucket con manifiesto SHA-256), `restauracion-prueba.ps1`
+(100 % local: restaura en un PostgreSQL desechable y compara la huella). La **huella** (`huella-datos.sql`) son recuentos y md5 de
+categorías, productos, inventario, ubicaciones, movimientos, usuarios y fotos usando solo columnas V1: debe ser idéntica en producción
+antes, en el respaldo restaurado y en producción después de migrar.
+
+| # | Qué | Criterio para seguir |
+|---|---|---|
+| 0 | Verificación previa (solo lectura, cualquier día) | Dry-run = exactamente las 6 pendientes; esquema = V1 exacta; guardas de `20261014000000` cumplidas. |
+| 1 | Anunciar ventana; nadie usa la app (≈ 45 min) | — |
+| 2 | Respaldo (`respaldo-produccion.ps1`) | Huella idéntica antes/después del volcado; fotos descargadas = `storage.objects`. |
+| 3 | Restauración de prueba local (`restauracion-prueba.ps1`) | Huella restaurada idéntica a la de producción. **Sin esto no se migra.** |
+| 4 | Migrar: `db push` de las 6 pendientes (dry-run antes; confirmación manual) | Historial = 14; huella idéntica a la del paso 2 (V2 no cambia datos). |
+| 5 | Verificar esquema y permisos (consultas de solo lectura) | `PT409` en las dos RPC, `solicitud_id` NULL+UNIQUE, 72 códigos registrados, RLS intactas. |
+| 6 | Publicar V2: merge de la rama en `main` y push (Netlify publica `main` automáticamente) | Despliegue «Published»; app V1 sigue funcionando hasta ese momento sobre el esquema migrado. |
+| 7 | Humo sin cajas (§4, puntos 1–5 y 7–8, solo torres) | Todo OK con 0 estantes. |
+| 8 | Aprovisionar 6 estantes / 24 cajas con las **etiquetas reales aprobadas por escrito** | 6/24/96/96; irreversible por diseño. |
+| 9 | Humo completo (§4) y cierre de la ventana | Huella: recuentos coherentes con lo hecho en el humo. |
+
+## 2b. Recuperación (sin revertir migraciones)
+
+- **Fallo antes del paso 4:** no se tocó nada; cerrar la ventana.
+- **Fallo en el paso 4:** cada migración es transaccional; el historial dice hasta dónde llegó. Se diagnostica y se reanuda; la app V1
+  sigue funcionando sobre un esquema parcialmente expandido (todas las piezas son aditivas y compatibles con V1).
+- **Fallo de la app V2 tras el paso 6:** volver al despliegue anterior en Netlify (*Deploys → deploy previo → Publish deploy*) o
+  revertir el merge en `main`. **El esquema V2 se queda**: V1 funciona sobre él (validado en staging) y los datos escritos después
+  del despliegue se conservan. No se borra ninguna columna ni tabla.
+- **Corrupción de datos (último recurso):** antes de restaurar, exportar todo lo escrito después del respaldo (movimientos con
+  `fecha` posterior a la huella del paso 2, productos/categorías con `actualizado_en` posterior y fotos nuevas en el bucket); restaurar
+  los datos del respaldo y volver a registrar esas operaciones. Por eso la ventana debe ser corta y sin uso.
+- **Aprovisionamiento (paso 8):** no se deshace; solo restaurando el respaldo. Por eso va al final, tras el humo sin cajas.
 
 Migraciones, en este orden: `20260929000000_initial_inventory_schema`, `20260929010000_harden_inventory_permissions`,
 `20260930000000_shared_account_read_access`, `20260930010000_limit_dashboard_read_access`, `20260930020000_shared_account_category_read`,
