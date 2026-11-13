@@ -29,23 +29,32 @@ contiene credenciales, URLs de producción ni etiquetas reales de cajas.
 
 ## 2. Secuencia operativa de publicación (la base de datos siempre ANTES que la aplicación)
 
-Herramientas (fuera del repositorio, en `%USERPROFILE%\ingeagro-produccion\`; ninguna guarda credenciales; las consultas que usan
-están versionadas en `supabase/release/` y ensayadas en `tests/release-rehearsal.local.mjs`):
-- `verificar-produccion.ps1`: **solo** `supabase db query --read-only` con tres SELECT (estado del esquema, historial, huella). No usa
+Herramientas (fuera del repositorio, en `%USERPROFILE%\ingeagro-produccion\`; **Node.js**, sin scripts de PowerShell: las versiones
+`.ps1` anteriores las bloqueaba el AMSI de McAfee por heurística; ninguna guarda credenciales; las consultas que usan están versionadas
+en `supabase/release/` y ensayadas en `tests/release-rehearsal.local.mjs`). Las credenciales se piden ocultas en consola o, si las
+lanza el asistente, en un formulario local de un solo uso (127.0.0.1) dentro de un Chromium aislado; nunca se escriben en disco.
+- `verificar-produccion.mjs`: **solo** `supabase db query --read-only` con tres SELECT (estado del esquema, historial, huella). No usa
   `migration list` ni `db push --dry-run` (ninguna orden que pueda crear o tocar el historial); el dry-run real se hace en la ventana.
-- `respaldo-produccion.ps1`: `pg_dump` 18 (binarios EDB portables, firma verificada; servidor 14–18) + **archivos reales** del bucket
-  con manifiesto SHA-256; zip **cifrado** con `cifrado-respaldo.ps1` y verificado por descifrado completo; borra el texto plano.
-- `restauracion-prueba.ps1`: 100 % local; descifra, comprueba SHA-256 de volcados y de cada foto (y que sean imágenes), restaura en un
-  PostgreSQL desechable y compara la huella. Ensayado de extremo a extremo con datos ficticios (incluidos casos que deben fallar).
-- `restaurar-storage.mjs`: re-subida de las fotos (simulación por defecto; `upsert:false`).
+- `respaldo-produccion.mjs`: `pg_dump` 18 (binarios EDB portables con SHA-256 fijado; servidor 14–18; sesión de solo lectura y SSL
+  obligatorio) + **archivos reales** del bucket con manifiesto SHA-256; paquete `.tar` (tar de Windows) **cifrado** con `lib/cifrado.mjs`
+  y verificado por descifrado completo; borra el texto plano (y los restos de una ejecución interrumpida).
+- `restauracion-prueba.mjs`: 100 % local; descifra, comprueba SHA-256 de volcados y de cada foto (y que sean imágenes), restaura en un
+  PostgreSQL desechable y compara la huella.
+- `restaurar-storage.mjs`: re-subida de las fotos (simulación por defecto; `--ejecutar` con frase de confirmación; `upsert:false`).
+- `descifrar-respaldo.mjs`: recuperación manual `.igr` → `.tar` (incluye los comandos OpenSSL equivalentes).
+- Pruebas (`pruebas/`): cifrado (incl. descifrado independiente con OpenSSL) y extremo a extremo con PostgreSQL 18 desechable, Storage
+  simulado y la CLI real de Supabase: verificar → respaldo → restauración, más casos que deben fallar (foto o volcado alterados, huella
+  distinta, contraseña errónea, foto ausente en Storage).
 
 La **huella** (`huella-datos.sql`) son recuentos y md5 de categorías, productos, inventario, ubicaciones, movimientos, usuarios y fotos
 usando solo columnas V1: debe ser idéntica en producción antes, en el respaldo restaurado y en producción después de migrar (el ensayo
-local con las 14 migraciones lo confirma).
+local con las 14 migraciones lo confirma). Incluye marcas de tiempo, que se representan en la zona horaria de la sesión: respaldo y
+restauración fuerzan UTC; el verificador usa la del servidor (UTC en Supabase). Compare siempre huellas de la misma herramienta
+(respaldo ↔ restauración ↔ respaldo/psql tras migrar; verificador ↔ verificador).
 
 **Cifrado del respaldo:** AES-256-CBC + HMAC-SHA256 (cifrar y luego autenticar), clave PBKDF2-SHA256 de 600 000 iteraciones, formato
-documentado en `cifrado-respaldo.ps1`. Funciona con Windows PowerShell 5.1 sin instalar nada y se ha comprobado que **OpenSSL descifra
-el archivo de forma independiente**, así que no depende de este equipo. No se usa EFS como protección única: este perfil no tiene
+documentado en `lib/cifrado.mjs` y `descifrar-respaldo.mjs` (`node:crypto`, sin dependencias) y se ha comprobado que **OpenSSL deriva
+las claves, valida el HMAC y descifra el archivo de forma independiente**, así que no depende de este equipo. No se usa EFS como protección única: este perfil no tiene
 certificado EFS y perderlo haría el respaldo irrecuperable. La contraseña del respaldo se guarda en el gestor de contraseñas.
 
 **Qué demuestra la restauración de prueba y qué no:**
@@ -61,8 +70,8 @@ certificado EFS y perderlo haría el respaldo irrecuperable. La contraseña del 
 |---|---|---|
 | 0 | Verificación previa (solo lectura, cualquier día) | Historial = exactamente las 8 V1 (pendientes = 6); esquema = V1 exacta; guardas de `20261014000000` cumplidas. |
 | 1 | Anunciar ventana; nadie usa la app (≈ 45 min) | — |
-| 2 | Respaldo (`respaldo-produccion.ps1`) | Huella idéntica antes/después del volcado; fotos descargadas = `storage.objects`. |
-| 3 | Restauración de prueba local (`restauracion-prueba.ps1`) | Huella restaurada idéntica a la de producción. **Sin esto no se migra.** |
+| 2 | Respaldo (`respaldo-produccion.mjs`) | Huella idéntica antes/después del volcado; fotos descargadas = `storage.objects`. |
+| 3 | Restauración de prueba local (`restauracion-prueba.mjs`) | Huella restaurada idéntica a la de producción. **Sin esto no se migra.** |
 | 4 | Migrar: `db push` de las 6 pendientes (dry-run antes; confirmación manual) | Historial = 14; huella idéntica a la del paso 2 (V2 no cambia datos). |
 | 5 | Verificar esquema y permisos (consultas de solo lectura) | `PT409` en las dos RPC, `solicitud_id` NULL+UNIQUE, 72 códigos registrados, RLS intactas. |
 | 6 | Publicar V2: merge de la rama en `main` y push (Netlify publica `main` automáticamente) | Despliegue «Published»; app V1 sigue funcionando hasta ese momento sobre el esquema migrado. |
@@ -114,7 +123,7 @@ la migración falla limpia y se reintenta). Hacerlo en una ventana sin uso de la
 
 ### Respaldo previo (obligatorio, verificado antes de migrar)
 
-El plan Free no incluye copias automáticas descargables. Se hace con `respaldo-produccion.ps1` y `restauracion-prueba.ps1` (ver §2):
+El plan Free no incluye copias automáticas descargables. Se hace con `respaldo-produccion.mjs` y `restauracion-prueba.mjs` (ver §2):
 volcado lógico (`public` + historial; `auth.users`, `auth.identities`, `storage.buckets`, `storage.objects`), archivos reales del
 bucket con SHA-256, huella antes/después del volcado, paquete cifrado y restauración local comprobada. La huella guardada es la
 referencia que debe coincidir exactamente tras la migración (V2 no cambia ninguno de esos datos).

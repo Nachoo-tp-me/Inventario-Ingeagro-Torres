@@ -16,7 +16,7 @@ function TopSector({
   return (
     <button
       type="button"
-      className={`top-view-sector ${compartment.ocupado ? "occupied" : "available"}${selected ? " selected" : ""}`}
+      className={`top-view-sector ${slot.row === 1 ? "upper" : "lower"} ${compartment.ocupado ? "occupied" : "available"}${selected ? " selected" : ""}`}
       style={{ gridRow: slot.row, gridColumn: slot.column }}
       onClick={() => onSelect(compartment.id)}
       aria-label={`${compartment.codigo}, ${compartment.ocupado ? "ocupado" : "disponible"}`}
